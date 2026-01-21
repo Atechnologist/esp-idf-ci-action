@@ -1,0 +1,24 @@
+name: Build ESP-BOX Example
+on: [push, workflow_dispatch]
+
+jobs:
+  build-example:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          submodules: 'recursive' # Required for esp-box components
+
+      - name: Build matter_switch
+        uses: espressif/esp-idf-ci-action@v1
+        with:
+          esp_idf_version: v5.1  # Recommended version for ESP-BOX
+          target: esp32s3        # Target chip for ESP-BOX
+          path: 'https://github.com/espressif/esp-box/tree/master/examples/matter_switch' # Path to specific example
+
+      - name: Upload Binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: esp-box-matter_switch
+          path: 'examples/matter_switch/build/*.bin' # Collects all generated binaries
