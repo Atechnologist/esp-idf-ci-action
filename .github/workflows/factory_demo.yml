@@ -22,4 +22,3 @@ jobs:
         with:
           name: esp-box-factory-demo
           path: 'examples/factory_demo/build/*.bin' # Collects all generated binaries
-ploy your project.
