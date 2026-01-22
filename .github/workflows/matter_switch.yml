@@ -1,52 +1,41 @@
-name: Build ESP-BOX Example
+name: Build ESP-BOX Matter Switch
 on: [push, workflow_dispatch]
 
 jobs:
-  build-example:
+  build:
     runs-on: ubuntu-latest
-    steps:
-      - name: 'Checkout repository'
-        uses: actions/checkout@v4
-        with:
-          submodules: 'recursive' # Required for esp-box components if any
+    # Use the official Matter container which has the environment pre-installed
+    container: espressif/esp-matter:latest 
 
-      - name: 'Checkout esp-box repository (example)'
+    steps:
+      - name: Checkout esp-box (Your current repo or the official one)
         uses: actions/checkout@v4
         with:
           repository: 'espressif/esp-box'
           path: 'esp-box'
           submodules: 'recursive'
 
-      - name: 'Checkout esp-matter repository'
-        uses: actions/checkout@v4
-        with:
-          repository: 'espressif/esp-matter'
-          path: 'esp-matter'
-          submodules: 'recursive'
-
-      - name: 'Set ESP_MATTER_PATH for subsequent steps'
-        run: echo "ESP_MATTER_PATH=${GITHUB_WORKSPACE}/esp-matter" >> $GITHUB_ENV
-
-      - name: 'Debug: list example folders and env'
+      - name: Build Matter Switch Example
+        shell: bash
         run: |
-          echo "GITHUB_WORKSPACE: $GITHUB_WORKSPACE"
-          echo "Contents of workspace:"
-          ls -la "$GITHUB_WORKSPACE" || true
-          echo "--- esp-box (example) ---"
-          ls -la "$GITHUB_WORKSPACE/esp-box" || true
-          echo "--- esp-matter ---"
-          ls -la "$GITHUB_WORKSPACE/esp-matter" || true
-          echo "ESP_MATTER_PATH env var visible to this step: $ESP_MATTER_PATH"
+          # 1. Source the pre-installed IDF and Matter environments
+          . /opt/espressif/esp-idf/export.sh
+          . /opt/espressif/esp-matter/export.sh
+          
+          # 2. Navigate to the example folder
+          cd esp-box/examples/matter_switch
+          
+          # 3. Set target and build
+          idf.py set-target esp32s3
+          idf.py build
+          
+          # 4. (Optional) Merge binaries for easy flashing
+          idf.py merge-bin -o matter_switch_merged.bin
 
-      - name: 'Build matter_switch'
-        uses: espressif/esp-idf-ci-action@v1
-        with:
-          esp_idf_version: 'v5.1'      # Recommended version for ESP-BOX
-          target: 'esp32s3'           # Target chip for ESP-BOX
-          path: 'esp-box/examples/matter_switch' # Path to checked-out example in esp-box
-
-      - name: 'Upload Binary'
+      - name: Upload Binary Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: 'esp-box-matter_switch'
-          path: 'esp-box/examples/matter_switch/build/*.bin' # Collects generated binaries
+          name: esp-box-matter-switch
+          path: |
+            esp-box/examples/matter_switch/build/*.bin
+            esp-box/examples/matter_switch/matter_switch_merged.bin
