@@ -20,8 +20,11 @@ jobs:
           # This runs both commands inside the container where esptool is installed
           command: |
             idf.py build
-            cd build
-            esptool.py --chip esp32s3 merge_bin -o factory_demo_full.bin @flash_args
+            # This generates the model partition binary from the components
+            python $IDF_PATH/components/esptool_py/esptool/esptool.py --chip esp32s3 merge_bin -o build/model.bin @build/flash_model_args || true
+            # This generates the storage partition (UI/Graphics)
+            python $IDF_PATH/components/esptool_py/esptool/esptool.py --chip esp32s3 merge_bin -o build/storage.bin @build/flash_storage_args || true
+
 
       - name: Upload Complete Firmware Set
         uses: actions/upload-artifact@v4
