@@ -9,30 +9,24 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: 'espressif/esp-box'
-          submodules: 'recursive' # CRITICAL: esp-box relies on many submodules
+          submodules: 'recursive'
 
-      - name: Build Factory Demo
+      - name: Build and Merge Binary
         uses: espressif/esp-idf-ci-action@v1
         with:
-          esp_idf_version: v5.3  # Stable 2026 version for ESP-BOX
-          target: esp32s3        # ESP-BOX always uses S3
+          esp_idf_version: v5.3
+          target: esp32s3
           path: 'examples/factory_demo'
-
-      - name: Create Merged Binary
-        # This makes it easier to flash via web tools later
-        shell: bash
-        run: |
-          cd examples/factory_demo/build
-          # Note: idf.py is available in the action environment
-          # This creates a single file at 0x0 offset
-          esptool.py --chip esp32s3 merge_bin -o factory_demo_full.bin @flash_args
+          # This runs both commands inside the container where esptool is installed
+          command: |
+            idf.py build
+            cd build
+            esptool.py --chip esp32s3 merge_bin -o factory_demo_full.bin @flash_args
 
       - name: Upload Binary Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: esp-box-factory-demo
           path: |
-            examples/factory_demo/build/factory_demo.bin
             examples/factory_demo/build/factory_demo_full.bin
-            examples/factory_demo/build/partition_table/partition-table.bin
-            examples/factory_demo/build/bootloader/bootloader.bin
+            examples/factory_demo/build/factory_demo.bin
