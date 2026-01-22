@@ -15,8 +15,18 @@ jobs:
         with:
           esp_idf_version: v5.1  # Recommended version for ESP-BOX
           target: esp32s3        # Target chip for ESP-BOX
-          path: 'https://github.com/espressif/esp-box/tree/master/examples/factory_demo' # Path to specific example
-
+          path: '    - name: Checkout esp-box example
+      uses: actions/checkout@v4
+      with:
+        repository: espressif/esp-box
+        ref: master
+        path: esp-box
+    - name: Build Factory Demo
+      uses: espressif/esp-idf-ci-action@v1
+      with:
+        esp_idf_version: v5.1
+        target: esp32s3
+        path: 'esp-box/examples/factory_demo' # Path to specific example
       - name: Upload Binary
         uses: actions/upload-artifact@v4
         with:
