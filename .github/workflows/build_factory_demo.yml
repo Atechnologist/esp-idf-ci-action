@@ -1,4 +1,4 @@
-name: Build ESP-BOX Factory Demo
+name: Build ESP-BOX Factory Demo (2026)
 on: [push, workflow_dispatch]
 
 jobs:
@@ -9,31 +9,40 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: 'espressif/esp-box'
-          submodules: 'recursive'
+          submodules: 'recursive' # CRITICAL: Downloads LVGL and Voice Models
 
-      - name: Build and Merge Binary
+      - name: Build and Generate All Binaries
         uses: espressif/esp-idf-ci-action@v1
         with:
-          esp_idf_version: v5.3
+          esp_idf_version: v5.3  # Stable version for 2026
           target: esp32s3
           path: 'examples/factory_demo'
-          # This runs both commands inside the container where esptool is installed
+          # This command builds the app AND generates the missing model/storage bins
           command: |
+            # 1. Standard build for App, Bootloader, and Partitions
             idf.py build
-            # This generates the model partition binary from the components
-            python $IDF_PATH/components/esptool_py/esptool/esptool.py --chip esp32s3 merge_bin -o build/model.bin @build/flash_model_args || true
-            # This generates the storage partition (UI/Graphics)
-            python $IDF_PATH/components/esptool_py/esptool/esptool.py --chip esp32s3 merge_bin -o build/storage.bin @build/flash_storage_args || true
+            
+            # 2. Generate the Model binary (Voice Recognition)
+            # Find the SR component and run the model packer
+            SR_PATH=$(find . -name "esp-sr" -type d | head -n 1)
+            python $SR_PATH/movemodel.py -d1 ./sdkconfig -d2 $SR_PATH -d3 ./build
+            cp build/srmodels/srmodels.bin build/model.bin || echo "Model bin not found"
+            
+            # 3. Generate the Storage binary (UI Graphics/Assets)
+            # This uses the spiffs/fatfs config defined in the project
+            python $IDF_PATH/components/esptool_py/esptool/esptool.py --chip esp32s3 merge_bin -o build/storage.bin @build/flash_storage_args || echo "Storage bin not found"
+            
+            # 4. Create a single "Full" binary for easier flashing (at 0x0)
+            idf.py merge-bin -o factory_demo_full.bin
 
-
-      - name: Upload Complete Firmware Set
+      - name: Upload All Files
         uses: actions/upload-artifact@v4
         with:
-          name: esp-box-factory-demo-complete
+          name: esp-box-factory-bundle
           path: |
             examples/factory_demo/build/factory_demo.bin
-            examples/factory_demo/build/storage.bin
             examples/factory_demo/build/model.bin
+            examples/factory_demo/build/storage.bin
+            examples/factory_demo/build/factory_demo_full.bin
             examples/factory_demo/build/partition_table/partition-table.bin
             examples/factory_demo/build/bootloader/bootloader.bin
-
