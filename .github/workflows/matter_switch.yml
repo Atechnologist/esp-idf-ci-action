@@ -5,29 +5,29 @@ jobs:
   build-example:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
+      - name: 'Checkout repository'
         uses: actions/checkout@v4
         with:
           submodules: 'recursive' # Required for esp-box components if any
 
-      - name: Checkout esp-box repository (example)
+      - name: 'Checkout esp-box repository (example)'
         uses: actions/checkout@v4
         with:
           repository: 'espressif/esp-box'
           path: 'esp-box'
           submodules: 'recursive'
 
-      - name: Checkout esp-matter repository
+      - name: 'Checkout esp-matter repository'
         uses: actions/checkout@v4
         with:
           repository: 'espressif/esp-matter'
           path: 'esp-matter'
           submodules: 'recursive'
 
-      - name: Set ESP_MATTER_PATH for subsequent steps
+      - name: 'Set ESP_MATTER_PATH for subsequent steps'
         run: echo "ESP_MATTER_PATH=${GITHUB_WORKSPACE}/esp-matter" >> $GITHUB_ENV
 
-      - name: Debug: list example folders and env
+      - name: 'Debug: list example folders and env'
         run: |
           echo "GITHUB_WORKSPACE: $GITHUB_WORKSPACE"
           echo "Contents of workspace:"
@@ -38,15 +38,15 @@ jobs:
           ls -la "$GITHUB_WORKSPACE/esp-matter" || true
           echo "ESP_MATTER_PATH env var visible to this step: $ESP_MATTER_PATH"
 
-      - name: Build matter_switch
+      - name: 'Build matter_switch'
         uses: espressif/esp-idf-ci-action@v1
         with:
           esp_idf_version: 'v5.1'      # Recommended version for ESP-BOX
           target: 'esp32s3'           # Target chip for ESP-BOX
           path: 'esp-box/examples/matter_switch' # Path to checked-out example in esp-box
 
-      - name: Upload Binary
+      - name: 'Upload Binary'
         uses: actions/upload-artifact@v4
         with:
-          name: esp-box-matter_switch
+          name: 'esp-box-matter_switch'
           path: 'esp-box/examples/matter_switch/build/*.bin' # Collects generated binaries
