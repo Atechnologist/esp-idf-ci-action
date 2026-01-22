@@ -2,40 +2,40 @@ name: Build ESP-BOX Matter Switch
 on: [push, workflow_dispatch]
 
 jobs:
-  build:
+  build-matter:
     runs-on: ubuntu-latest
-    # Use the official Matter container which has the environment pre-installed
+    # Use the dedicated Matter container
     container: espressif/esp-matter:latest 
 
     steps:
-      - name: Checkout esp-box (Your current repo or the official one)
+      - name: Checkout esp-box
         uses: actions/checkout@v4
         with:
           repository: 'espressif/esp-box'
           path: 'esp-box'
           submodules: 'recursive'
 
-      - name: Build Matter Switch Example
+      - name: Build matter_switch
         shell: bash
         run: |
-          # 1. Source the pre-installed IDF and Matter environments
+          # 1. Source the pre-installed environments inside the container
           . /opt/espressif/esp-idf/export.sh
           . /opt/espressif/esp-matter/export.sh
           
-          # 2. Navigate to the example folder
+          # 2. Navigate to example
           cd esp-box/examples/matter_switch
           
-          # 3. Set target and build
+          # 3. Build specifically for S3 target
           idf.py set-target esp32s3
           idf.py build
           
-          # 4. (Optional) Merge binaries for easy flashing
-          idf.py merge-bin -o matter_switch_merged.bin
+          # 4. Optional: Merge binaries for easier web flashing
+          idf.py merge-bin -o matter_switch_full.bin
 
-      - name: Upload Binary Artifact
+      - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: esp-box-matter-switch
+          name: esp-box-matter-binaries
           path: |
             esp-box/examples/matter_switch/build/*.bin
-            esp-box/examples/matter_switch/matter_switch_merged.bin
+            esp-box/examples/matter_switch/matter_switch_full.bin
