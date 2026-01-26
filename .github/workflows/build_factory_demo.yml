@@ -1,4 +1,5 @@
-name: Build ESP-BOX Factory Demo (2026)
+
+name: Build ESP-BOX Compatible (2026)
 on: [push, workflow_dispatch]
 
 jobs:
@@ -9,40 +10,39 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: 'espressif/esp-box'
-          submodules: 'recursive' # CRITICAL: Downloads LVGL and Voice Models
+          submodules: 'recursive'
 
-      - name: Build and Generate All Binaries
+      - name: Build and Generate Compatible Binaries
         uses: espressif/esp-idf-ci-action@v1
         with:
-          esp_idf_version: v5.3  # Stable version for 2026
+          esp_idf_version: v5.3
           target: esp32s3
           path: 'examples/factory_demo'
-          # This command builds the app AND generates the missing model/storage bins
+          # We force DIO mode to fix the 'invalid segment' error for S3 v0.1 chips
           command: |
-            # 1. Standard build for App, Bootloader, and Partitions
+            # 1. Apply compatibility settings for S3 v0.1 hardware
+            echo "CONFIG_ESPTOOLPY_FLASHMODE_DIO=y" >> sdkconfig.defaults
+            echo "CONFIG_ESPTOOLPY_FLASHMODE_OPI=n" >> sdkconfig.defaults
+            echo "CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y" >> sdkconfig.defaults
+            
+            # 2. Build the project
             idf.py build
             
-            # 2. Generate the Model binary (Voice Recognition)
-            # Find the SR component and run the model packer
+            # 3. Generate the Model binary (Voice Recognition)
             SR_PATH=$(find . -name "esp-sr" -type d | head -n 1)
             python $SR_PATH/movemodel.py -d1 ./sdkconfig -d2 $SR_PATH -d3 ./build
-            cp build/srmodels/srmodels.bin build/model.bin || echo "Model bin not found"
+            cp build/srmodels/srmodels.bin build/model.bin
             
-            # 3. Generate the Storage binary (UI Graphics/Assets)
-            # This uses the spiffs/fatfs config defined in the project
-            python $IDF_PATH/components/esptool_py/esptool/esptool.py --chip esp32s3 merge_bin -o build/storage.bin @build/flash_storage_args || echo "Storage bin not found"
-            
-            # 4. Create a single "Full" binary for easier flashing (at 0x0)
-            idf.py merge-bin -o factory_demo_full.bin
+            # 4. Generate the Storage binary (UI Graphics)
+            python $IDF_PATH/components/esptool_py/esptool/esptool.py --chip esp32s3 merge_bin -o build/storage.bin @build/flash_storage_args
 
-      - name: Upload All Files
+      - name: Upload Binaries
         uses: actions/upload-artifact@v4
         with:
-          name: esp-box-factory-bundle
+          name: esp-box-compat-bundle
           path: |
             examples/factory_demo/build/factory_demo.bin
             examples/factory_demo/build/model.bin
             examples/factory_demo/build/storage.bin
-            examples/factory_demo/build/factory_demo_full.bin
             examples/factory_demo/build/partition_table/partition-table.bin
             examples/factory_demo/build/bootloader/bootloader.bin
