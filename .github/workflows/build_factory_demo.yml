@@ -1,11 +1,11 @@
-name: Build ESP-BOX Compatible (2026)
+name: Build ESP-BOX Compatible
 on: [push, workflow_dispatch]
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout esp-box repository
+      - name: Checkout esp-box
         uses: actions/checkout@v4
         with:
           repository: 'espressif/esp-box'
@@ -18,33 +18,28 @@ jobs:
           target: esp32s3
           path: 'examples/factory_demo'
           command: |
-            # 1. Force compatibility for S3 v0.1 hardware
+            # 1. Force DIO mode for S3 v0.1 hardware compatibility
             echo "CONFIG_ESPTOOLPY_FLASHMODE_DIO=y" >> sdkconfig.defaults
             echo "CONFIG_ESPTOOLPY_FLASHMODE_OPI=n" >> sdkconfig.defaults
             
             # 2. Build the project
             idf.py build
             
-            # 3. Generate Model binary (Corrected Paths)
-            # Find the actual path to the movemodel.py script inside the workspace
-            SR_PATH=$(find ../../ -name "movemodel.py" | head -n 1)
-            python "$SR_PATH" -d1 ./sdkconfig -d2 "$(dirname "$SR_PATH")" -d3 ./build
+            # 3. Correctly generate the Model binary (Voice Recognition)
+            # Find movemodel.py and provide the DIRECT path to the sdkconfig FILE
+            SR_PATH=$(find ../../managed_components -name "movemodel.py" | head -n 1)
+            SR_DIR=$(dirname "$SR_PATH")
+            python "$SR_PATH" -d1 ./sdkconfig -d2 "$SR_DIR" -d3 ./build
             cp build/srmodels/srmodels.bin build/model.bin || echo "Model copy failed"
             
-            # 4. Generate Storage binary (Corrected logic)
-            # Some versions of IDF 5.3 don't generate flash_storage_args automatically
-            # We use esptool to merge the spiffs partition if it exists
-            if [ -f "build/storage.bin" ]; then
-              echo "Storage bin already exists"
-            else
-              # Fallback: attempt to find the partition and manually merge if needed
-              echo "Using manual storage check"
-            fi
+            # 4. Generate the Storage binary (UI Graphics)
+            # This uses the specific spiffs/fatfs image generation tool
+            idf.py storage-flash
 
       - name: Upload Binaries
         uses: actions/upload-artifact@v4
         with:
-          name: esp-box-bundle
+          name: esp-box-complete-bundle
           path: |
             examples/factory_demo/build/bootloader/bootloader.bin
             examples/factory_demo/build/partition_table/partition-table.bin
