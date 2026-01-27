@@ -11,30 +11,32 @@ jobs:
           repository: 'espressif/esp-box'
           submodules: 'recursive'
 
-      - name: Build and Generate Binaries
+            - name: Build and Generate Binaries
         uses: espressif/esp-idf-ci-action@v1
         with:
           esp_idf_version: v5.3
           target: esp32s3
           path: 'examples/factory_demo'
           command: |
-            # 1. Force DIO mode for S3 v0.1 hardware compatibility
+            # 1. Compatibility flags for S3 v0.1 (DIO mode)
             echo "CONFIG_ESPTOOLPY_FLASHMODE_DIO=y" >> sdkconfig.defaults
             echo "CONFIG_ESPTOOLPY_FLASHMODE_OPI=n" >> sdkconfig.defaults
             
-            # 2. Build the project
+            # 2. Standard build
             idf.py build
             
-            # 3. Correctly generate the Model binary (Voice Recognition)
-            # Find movemodel.py and provide the DIRECT path to the sdkconfig FILE
+            # 3. Generate Model binary (Voice Recognition)
             SR_PATH=$(find ../../managed_components -name "movemodel.py" | head -n 1)
             SR_DIR=$(dirname "$SR_PATH")
             python "$SR_PATH" -d1 ./sdkconfig -d2 "$SR_DIR" -d3 ./build
             cp build/srmodels/srmodels.bin build/model.bin || echo "Model copy failed"
             
-            # 4. Generate the Storage binary (UI Graphics)
-            # This uses the specific spiffs/fatfs image generation tool
-            idf.py storage-flash
+            # 4. Generate Storage binary (UI Graphics) - NON-FLASHING WAY
+            # We use the internal spiffsgen script to avoid the "Serial Port" error
+            SPIFFSGEN_PY="$IDF_PATH/components/spiffs/spiffsgen.py"
+            # 0x28a000 is the partition size from your logs (2662400 bytes)
+            python "$SPIFFSGEN_PY" 0x28a000 image build/storage.bin
+
 
       - name: Upload Binaries
         uses: actions/upload-artifact@v4
