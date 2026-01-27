@@ -18,7 +18,7 @@ jobs:
           target: esp32s3
           path: 'examples/factory_demo'
           command: |
-            # 1. Force compatibility (DIO mode)
+            # 1. Force compatibility (DIO mode) for S3 v0.1 hardware
             echo "CONFIG_ESPTOOLPY_FLASHMODE_DIO=y" >> sdkconfig.defaults
             echo "CONFIG_ESPTOOLPY_FLASHMODE_OPI=n" >> sdkconfig.defaults
             
@@ -26,14 +26,14 @@ jobs:
             idf.py build
             
             # 3. Generate Model binary (Voice AI)
-            # Find the script in the managed_components folder created during build
+            # We must provide the direct path to the sdkconfig FILE, not a folder
             SR_PATH=$(find ./managed_components -name "movemodel.py" | head -n 1)
             SR_DIR=$(dirname "$SR_PATH")
             python "$SR_PATH" -d1 ./sdkconfig -d2 "$SR_DIR" -d3 ./build
             cp build/srmodels/srmodels.bin build/model.bin || echo "Model failed"
             
             # 4. Generate Storage binary (UI Graphics)
-            # The 'image' folder is located in the example root
+            # The 'image' directory is in the current project path
             python $IDF_PATH/components/spiffs/spiffsgen.py 0x28a000 image build/storage.bin
 
       - name: Upload Binaries
@@ -47,4 +47,3 @@ jobs:
             examples/factory_demo/build/factory_demo.bin
             examples/factory_demo/build/storage.bin
             examples/factory_demo/build/model.bin
-
