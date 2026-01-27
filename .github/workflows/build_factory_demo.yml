@@ -18,7 +18,9 @@ jobs:
           target: esp32s3
           path: 'examples/factory_demo'
           command: |
-            # 1. Fix Flash Mode for S3 v0.1 chip compatibility
+            # 1. Force Original ESP-BOX Board and DIO mode for v0.1 chip
+            echo "CONFIG_ESP_BOX_BOARD_S3_BOX=y" >> sdkconfig.defaults
+            echo "CONFIG_ESP_BOX_BOARD_S3_BOX_3=n" >> sdkconfig.defaults
             echo "CONFIG_ESPTOOLPY_FLASHMODE_DIO=y" >> sdkconfig.defaults
             echo "CONFIG_ESPTOOLPY_FLASHMODE_OPI=n" >> sdkconfig.defaults
             
@@ -26,13 +28,13 @@ jobs:
             idf.py build
             
             # 3. Generate Model binary (Voice AI)
-            # Find script and use absolute PWD to avoid NotADirectoryError
             SR_PATH=$(find ./managed_components -name "movemodel.py" | head -n 1)
             python "$SR_PATH" -d1 "$PWD/sdkconfig" -d2 "$(dirname "$SR_PATH")" -d3 "$PWD/build"
             cp build/srmodels/srmodels.bin build/model.bin || echo "Model copy failed"
             
             # 4. Generate Storage binary (UI Graphics)
-            python $IDF_PATH/components/esptool_py/esptool/esptool.py --chip esp32s3 merge_bin -o build/storage.bin @build/flash_storage_args || echo "Storage failed"
+            python $IDF_PATH/components/esptool_py/esptool/esptool.py --chip esp32s3 merge_bin -o build/storage.bin @build/flash_storage_args
+
 
       - name: Upload Complete Firmware
         uses: actions/upload-artifact@v4
