@@ -11,7 +11,7 @@ jobs:
           repository: 'espressif/esp-box'
           submodules: 'recursive'
 
-            - name: Build and Generate Binaries
+      - name: Build and Generate Binaries
         uses: espressif/esp-idf-ci-action@v1
         with:
           esp_idf_version: v5.3
