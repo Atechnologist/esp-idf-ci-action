@@ -18,23 +18,19 @@ jobs:
           target: esp32s3
           path: 'examples/factory_demo'
           command: |
-            # 1. Enter the specific example folder
-            cd examples/factory_demo
+            # 1. Clean and Setup Board Config using absolute paths
+            rm -f examples/factory_demo/sdkconfig.defaults.s3_box_3
+            echo "CONFIG_ESP_BOX_BOARD_S3_BOX=y" > examples/factory_demo/sdkconfig.defaults
+            echo "CONFIG_ESP_BOX_BOARD_S3_BOX_3=n" >> examples/factory_demo/sdkconfig.defaults
+            echo "CONFIG_ESPTOOLPY_FLASHMODE_DIO=y" >> examples/factory_demo/sdkconfig.defaults
+            echo "CONFIG_ESPTOOLPY_FLASHMODE_OPI=n" >> examples/factory_demo/sdkconfig.defaults
             
-            # 2. Clean old configs and remove BOX-3 defaults
-            rm -f sdkconfig sdkconfig.defaults.s3_box_3
-            
-            # 3. Force Original BOX Profile (Matches v0.1 chip)
-            echo "CONFIG_ESP_BOX_BOARD_S3_BOX=y" > sdkconfig.defaults
-            echo "CONFIG_ESP_BOX_BOARD_S3_BOX_3=n" >> sdkconfig.defaults
-            echo "CONFIG_ESPTOOLPY_FLASHMODE_DIO=y" >> sdkconfig.defaults
-            echo "CONFIG_ESPTOOLPY_FLASHMODE_OPI=n" >> sdkconfig.defaults
-            
-            # 4. Build fresh
+            # 2. Run the build (The action handles the path internally)
             idf.py build
             
-            # 5. Generate Storage bin using absolute path for the 'image' folder
-            python /opt/esp/idf/components/spiffs/spiffsgen.py 0x28a000 ./image build/storage.bin
+            # 3. Generate Storage bin using the ABSOLUTE path to the image folder
+            # The workspace is always at /github/workspace in this action
+            python /opt/esp/idf/components/spiffs/spiffsgen.py 0x28a000 /github/workspace/examples/factory_demo/image examples/factory_demo/build/storage.bin
 
       - name: Upload Binaries
         uses: actions/upload-artifact@v4
