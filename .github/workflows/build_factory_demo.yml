@@ -11,31 +11,34 @@ jobs:
           repository: 'espressif/esp-box'
           submodules: 'recursive'
 
-      - name: Build and Generate Binaries
+      - name: Build and Generate All Binaries
         uses: espressif/esp-idf-ci-action@v1
         with:
           esp_idf_version: v5.3
           target: esp32s3
           path: 'examples/factory_demo'
           command: |
-            # FIX: Force Original Board (matches your v0.1 chip)
+            # 1. Force Hardware Compatibility (v0.1 chip)
             echo "CONFIG_ESP_BOX_BOARD_S3_BOX=y" >> sdkconfig.defaults
             echo "CONFIG_ESP_BOX_BOARD_S3_BOX_3=n" >> sdkconfig.defaults
-            
-            # Keep your working compatibility flags
             echo "CONFIG_ESPTOOLPY_FLASHMODE_DIO=y" >> sdkconfig.defaults
             echo "CONFIG_ESPTOOLPY_FLASHMODE_OPI=n" >> sdkconfig.defaults
             
-            # Build
+            # 2. Build Project
             idf.py build
             
-            # FIX PATH: Use absolute container path to fix the model.bin generation
-            SR_PATH=$(find ./managed_components -name "movemodel.py" | head -n 1)
-            python "$SR_PATH" -d1 "/github/workspace/examples/factory_demo/sdkconfig" -d2 "$(dirname "$SR_PATH")" -d3 "./build"
-            cp build/srmodels/srmodels.bin build/model.bin || echo "Model copy failed"
+            # 3. FIX: Resolve the 'NotADirectory' conflict
+            # Move the metadata folder so the script sees the sdkconfig FILE
+            if [ -d "sdkconfig" ]; then mv sdkconfig sdkconfig_meta_dir; fi
             
-            # FIX STORAGE: Use spiffsgen directly to ensure storage.bin is created
-            python $IDF_PATH/components/spiffs/spiffsgen.py 0x28a000 image build/storage.bin || echo "Storage failed"
+            # 4. Generate Model binary (Voice AI)
+            SR_PATH=$(find ./managed_components -name "movemodel.py" | head -n 1)
+            # Use the local file path now that the folder conflict is gone
+            python "$SR_PATH" -d1 sdkconfig -d2 "$(dirname "$SR_PATH")" -d3 ./build
+            cp build/srmodels/srmodels.bin build/model.bin || echo "Model failed"
+            
+            # 5. Generate Storage binary (UI Graphics)
+            python $IDF_PATH/components/spiffs/spiffsgen.py 0x28a000 image build/storage.bin
 
       - name: Upload Binaries
         uses: actions/upload-artifact@v4
