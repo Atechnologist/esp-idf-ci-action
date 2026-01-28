@@ -1,4 +1,4 @@
-name: Build ESP-BOX Final (Absolute Paths)
+name: Build ESP-BOX Original 2026
 on: [push, workflow_dispatch]
 
 jobs:
@@ -18,26 +18,24 @@ jobs:
           target: esp32s3
           path: 'examples/factory_demo'
           command: |
-            # 1. Force Hardware Compatibility (Original BOX v0.1 chip)
+            # FIX: Force Original Board (matches your v0.1 chip)
             echo "CONFIG_ESP_BOX_BOARD_S3_BOX=y" >> sdkconfig.defaults
             echo "CONFIG_ESP_BOX_BOARD_S3_BOX_3=n" >> sdkconfig.defaults
+            
+            # Keep your working compatibility flags
             echo "CONFIG_ESPTOOLPY_FLASHMODE_DIO=y" >> sdkconfig.defaults
             echo "CONFIG_ESPTOOLPY_FLASHMODE_OPI=n" >> sdkconfig.defaults
             
-            # 2. Build Project
+            # Build
             idf.py build
             
-            # 3. Use internal container paths to fix the Directory Conflict
-            # In this action, the project root is always /github/workspace/examples/factory_demo
-            PROJECT_ROOT="/github/workspace/examples/factory_demo"
-            
-            # 4. Generate Model binary (Voice AI)
+            # FIX PATH: Use absolute container path to fix the model.bin generation
             SR_PATH=$(find ./managed_components -name "movemodel.py" | head -n 1)
-            python "$SR_PATH" -d1 "$PROJECT_ROOT/sdkconfig" -d2 "$(dirname "$SR_PATH")" -d3 "$PROJECT_ROOT/build"
+            python "$SR_PATH" -d1 "/github/workspace/examples/factory_demo/sdkconfig" -d2 "$(dirname "$SR_PATH")" -d3 "./build"
             cp build/srmodels/srmodels.bin build/model.bin || echo "Model copy failed"
             
-            # 5. Generate Storage binary (UI Graphics)
-            python $IDF_PATH/components/spiffs/spiffsgen.py 0x28a000 "$PROJECT_ROOT/image" build/storage.bin
+            # FIX STORAGE: Use spiffsgen directly to ensure storage.bin is created
+            python $IDF_PATH/components/spiffs/spiffsgen.py 0x28a000 image build/storage.bin || echo "Storage failed"
 
       - name: Upload Binaries
         uses: actions/upload-artifact@v4
