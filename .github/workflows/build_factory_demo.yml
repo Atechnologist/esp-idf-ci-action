@@ -3,55 +3,51 @@ on: [push, workflow_dispatch]
 
 jobs:
   build:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout esp-box
         uses: actions/checkout@v4
         with:
-          repository: espressif/esp-box
-          submodules: recursive
-          fetch-depth: 1
+          repository: 'espressif/esp-box'
+          submodules: 'recursive'
 
-      - name: Build ESP-BOX factory_demo
+      - name: Build and Generate Binaries
         uses: espressif/esp-idf-ci-action@v1
         with:
           esp_idf_version: v5.3
           target: esp32s3
-          path: examples/factory_demo
+          path: 'examples/factory_demo'
           command: |
-            set -e
-            rm -f sdkconfig.defaults* sdkconfig
+            # 1. Force Original ESP-BOX Board and DIO mode for v0.1 chip compatibility
+            echo "CONFIG_ESP_BOX_BOARD_S3_BOX=y" >> sdkconfig.defaults
+            echo "CONFIG_ESP_BOX_BOARD_S3_BOX_3=n" >> sdkconfig.defaults
+            echo "CONFIG_ESPTOOLPY_FLASHMODE_DIO=y" >> sdkconfig.defaults
+            echo "CONFIG_ESPTOOLPY_FLASHMODE_OPI=n" >> sdkconfig.defaults
             
-            cat <<EOF > sdkconfig.defaults
-            CONFIG_ESP_BOX_BOARD_S3_BOX=y
-            CONFIG_ESP_BOX_BOARD_S3_BOX_3=n
-            CONFIG_ESPTOOLPY_FLASHMODE_DIO=y
-            CONFIG_ESPTOOLPY_FLASHFREQ_80M=y
-            CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y
-            CONFIG_PARTITION_TABLE_CUSTOM=y
-            CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
-            CONFIG_COMPILER_WARNINGS_AS_ERRORS=n
-            EOF
+            # Disable touch completely (ESP-BOX v0.1 has no ESP-BOX-3 touch)
+            echo "CONFIG_ESP_BOX_TOUCH_SUPPORT=n" >> sdkconfig.defaults
+            echo "CONFIG_BSP_TOUCH_SUPPORT=n" >> sdkconfig.defaults
 
-            cat <<EOF > partitions.csv
-            nvs,      data, nvs,     ,        0x6000,
-            otadata,  data, ota,     ,        0x2000,
-            phy_init, data, phy,     ,        0x1000,
-            factory,  app,  factory, 0x20000, 0x400000,
-            storage,  data, spiffs,  0x43a000,0x28a000,
-            model,    data, spiffs,  0x6c4000,0x866000,
-            EOF
-
+            # 2. Build Project
             idf.py build
-            python /opt/esp/idf/components/spiffs/spiffsgen.py 0x28a000 image build/storage.bin
-
-      - name: Upload artifacts
+            
+            # 3. Generate Model binary (Voice AI)
+            # Use the absolute file path to the sdkconfig FILE to prevent Errno 20
+            SR_PATH=$(find ./managed_components -name "movemodel.py" | head -n 1)
+            python "$SR_PATH" -d1 "$GITHUB_WORKSPACE/examples/factory_demo/sdkconfig" -d2 "$(dirname "$SR_PATH")" -d3 "$GITHUB_WORKSPACE/examples/factory_demo/build"
+            cp build/srmodels/srmodels.bin build/model.bin || echo "Model copy failed"
+            
+            # 4. Generate Storage binary (UI Graphics)
+            # Manual merge if flash_storage_args is missing
+            python $IDF_PATH/components/esptool_py/esptool/esptool.py --chip esp32s3 merge_bin -o build/storage.bin @build/flash_storage_args || echo "Storage failed"
+      - name: Upload Binaries
         uses: actions/upload-artifact@v4
         with:
-          name: esp-box-v01-firmware
+          name: esp-box-v0.1-bundle
           path: |
             examples/factory_demo/build/bootloader/bootloader.bin
             examples/factory_demo/build/partition_table/partition-table.bin
             examples/factory_demo/build/ota_data_initial.bin
             examples/factory_demo/build/factory_demo.bin
             examples/factory_demo/build/storage.bin
+            examples/factory_demo/build/model.bin
