@@ -25,28 +25,41 @@ jobs:
           command: |
             set -e
 
+            # Clean previous configs
             rm -f sdkconfig.defaults*
+            rm -f partitions.csv
 
+            # ---- sdkconfig ----
             cat <<EOF > sdkconfig.defaults
             CONFIG_ESP_BOX_BOARD_S3_BOX=y
             CONFIG_ESP_BOX_BOARD_S3_BOX_3=n
             CONFIG_ESPTOOLPY_FLASHMODE_DIO=y
             CONFIG_ESPTOOLPY_FLASHMODE_OPI=n
+            CONFIG_PARTITION_TABLE_CUSTOM=y
+            CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
             EOF
 
+            # ---- partition table (VALID) ----
+            cat <<EOF > partitions.csv
+            # Name, Type, SubType, Offset, Size, Flags
+            nvs,data,nvs,0x9000,24K
+            phy_init,data,phy,0xf000,4K
+            ota_data,data,ota,0x10000,8K
+            factory,app,factory,0x12000,1M
+            spiffs,data,spiffs,,1M
+            EOF
+
+            # ---- Build ----
             idf.py build
 
-            # Extract SPIFFS offset dynamically
+            # ---- Generate SPIFFS dynamically ----
             SPIFFS_OFFSET=$(python $IDF_PATH/components/partition_table/gen_esp32part.py \
-              build/partition_table/partition-table.bin \
-              | awk '/spiffs/ {print $4}')
+              build/partition_table/partition-table.bin | awk '/spiffs/ {print $4}')
 
-            echo "SPIFFS offset: $SPIFFS_OFFSET"
+            echo "SPIFFS offset = $SPIFFS_OFFSET"
 
             python $IDF_PATH/components/spiffs/spiffsgen.py \
-              $SPIFFS_OFFSET \
-              image \
-              build/storage.bin
+              $SPIFFS_OFFSET image build/storage.bin
 
       - name: Upload firmware bundle
         uses: actions/upload-artifact@v4
