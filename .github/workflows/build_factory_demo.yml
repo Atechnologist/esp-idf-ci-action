@@ -1,4 +1,4 @@
-name: Build ESP-BOX Original 2026
+name: Build ESP-BOX Original Final 2026
 on: [push, workflow_dispatch]
 
 jobs:
@@ -18,7 +18,7 @@ jobs:
           target: esp32s3
           path: 'examples/factory_demo'
           command: |
-            # 1. Force Hardware Compatibility
+            # 1. Force Hardware Compatibility (Original BOX v0.1 chip)
             echo "CONFIG_ESP_BOX_BOARD_S3_BOX=y" >> sdkconfig.defaults
             echo "CONFIG_ESP_BOX_BOARD_S3_BOX_3=n" >> sdkconfig.defaults
             echo "CONFIG_ESPTOOLPY_FLASHMODE_DIO=y" >> sdkconfig.defaults
@@ -27,15 +27,15 @@ jobs:
             # 2. Build Project
             idf.py build
             
-            # 3. Generate Model binary (Voice AI)
-            # Use local path to ensure sdkconfig is treated as a file
+            # 3. Generate Model binary (Fixing the Path/Folder Conflict)
             SR_PATH=$(find ./managed_components -name "movemodel.py" | head -n 1)
-            python "$SR_PATH" -d1 sdkconfig -d2 "$(dirname "$SR_PATH")" -d3 build
-            cp build/srmodels/srmodels.bin build/model.bin || echo "Model failed"
+            # Use the full absolute path to the FILE to bypass the folder conflict
+            python "$SR_PATH" -d1 "${GITHUB_WORKSPACE}/examples/factory_demo/sdkconfig" -d2 "$(dirname "$SR_PATH")" -d3 "./build"
+            cp build/srmodels/srmodels.bin build/model.bin || echo "Model copy failed"
             
             # 4. Generate Storage binary (UI Graphics)
-            # Instead of looking for args files, we manually pack the image folder
-            python $IDF_PATH/components/spiffs/spiffsgen.py 0x28a000 image build/storage.bin
+            # Use the absolute path to the 'image' folder
+            python $IDF_PATH/components/spiffs/spiffsgen.py 0x28a000 "${GITHUB_WORKSPACE}/examples/factory_demo/image" build/storage.bin
 
       - name: Upload Binaries
         uses: actions/upload-artifact@v4
