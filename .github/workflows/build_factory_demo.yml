@@ -67,8 +67,7 @@ jobs:
             echo "--- NINJA LOG (if exists) ---"
             cat build/build.ninja || true
           
-            exit 1
-          }
+            exit 1 }
 
 
             # ---- SPIFFS ----
