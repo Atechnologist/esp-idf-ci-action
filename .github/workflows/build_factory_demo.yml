@@ -51,13 +51,25 @@ jobs:
             spiffs,data,spiffs,,2M
             EOF
 
-            # ---- Build (show errors if it fails) ----
             idf.py build || {
-              echo "====== BUILD FAILED ======"
-              cat build/log/idf_py_stderr_output_* || true
-              cat build/log/idf_py_stdout_output_* || true
-              exit 1
-            }
+            echo ""
+            echo "========== ESP-IDF BUILD FAILED =========="
+            echo ""
+          
+            echo "--- STDERR ---"
+            cat build/log/idf_py_stderr_output_* || echo "No stderr log"
+          
+            echo ""
+            echo "--- STDOUT ---"
+            cat build/log/idf_py_stdout_output_* || echo "No stdout log"
+          
+            echo ""
+            echo "--- NINJA LOG (if exists) ---"
+            cat build/build.ninja || true
+          
+            exit 1
+          }
+
 
             # ---- SPIFFS ----
             SPIFFS_OFFSET=$(python $IDF_PATH/components/partition_table/gen_esp32part.py \
