@@ -1,13 +1,9 @@
 name: Build ESP-BOX Original 2026
-
-on:
-  push:
-  workflow_dispatch:
+on: [push, workflow_dispatch]
 
 jobs:
   build:
     runs-on: ubuntu-22.04
-
     steps:
       - name: Checkout esp-box
         uses: actions/checkout@v4
@@ -24,47 +20,41 @@ jobs:
           path: examples/factory_demo
           command: |
             set -e
-
-            # --- SDKCONFIG ---
-            rm -f sdkconfig.defaults*
+            # 1. Clean and Setup SDKCONFIG (Force Original BOX & DIO mode)
+            rm -f sdkconfig.defaults* sdkconfig
             cat <<EOF > sdkconfig.defaults
             CONFIG_ESP_BOX_BOARD_S3_BOX=y
             CONFIG_ESP_BOX_BOARD_S3_BOX_3=n
             CONFIG_ESPTOOLPY_FLASHMODE_DIO=y
             CONFIG_ESPTOOLPY_FLASHFREQ_80M=y
-            CONFIG_ESPTOOLPY_FLASHSIZE_8MB=y
+            CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y
             CONFIG_PARTITION_TABLE_CUSTOM=y
             CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
             CONFIG_COMPILER_WARNINGS_AS_ERRORS=n
             EOF
 
-            # --- Partition table ---
+            # 2. Setup Partition Table (Matches your log offsets)
             cat <<EOF > partitions.csv
             # Name, Type, SubType, Offset, Size
-            nvs,data,nvs,0x9000,24K
-            phy_init,data,phy,0xf000,4K
-            ota_data,data,ota,0x10000,8K
-            factory,app,factory,0x20000,2M
-            spiffs,data,spiffs,,2M
+            nvs,      data, nvs,     ,        0x6000,
+            otadata,  data, ota,     ,        0x2000,
+            phy_init, data, phy,     ,        0x1000,
+            factory,  app,  factory, 0x20000, 0x400000,
+            storage,  data, spiffs,  0x43a000,0x28a000,
+            model,    data, spiffs,  0x6c4000,0x866000,
             EOF
 
-            # --- Build with CMake flags that ignore pthread warnings ---
-            idf.py build -D CMAKE_C_FLAGS="" -D CMAKE_CXX_FLAGS="" || {
-              echo "========== BUILD FAILED =========="
-              cat build/log/idf_py_stderr_output_* || true
-              cat build/log/idf_py_stdout_output_* || true
-              exit 1
-            }
+            # 3. Build (Path is relative to the Action's 'path' input)
+            idf.py build
 
-            # --- SPIFFS ---
-            SPIFFS_OFFSET=$(python $IDF_PATH/components/partition_table/gen_esp32part.py \
-              build/partition_table/partition-table.bin | awk '/spiffs/ {print $4}')
-            python $IDF_PATH/components/spiffs/spiffsgen.py $SPIFFS_OFFSET image build/storage.bin
+            # 4. Generate Storage Binary (Explicit path to graphics)
+            # 0x28a000 is the size defined in partitions.csv
+            python /opt/esp/idf/components/spiffs/spiffsgen.py 0x28a000 image build/storage.bin
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: esp-box-original-factory-demo
+          name: esp-box-v01-firmware
           path: |
             examples/factory_demo/build/bootloader/bootloader.bin
             examples/factory_demo/build/partition_table/partition-table.bin
