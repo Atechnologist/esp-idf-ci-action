@@ -1,4 +1,4 @@
-name: Build ESP-BOX Original Final
+name: Build ESP-BOX Original 2026
 on: [push, workflow_dispatch]
 
 jobs:
@@ -27,13 +27,14 @@ jobs:
             # 2. Build the project
             idf.py build
             
-            # 3. Generate Model binary (Fixing the Directory Conflict)
+            # 3. Generate Model binary (Voice AI)
+            # Find movemodel.py relative to the current project directory
             SR_PATH=$(find ./managed_components -name "movemodel.py" | head -n 1)
-            # Use absolute path to the FILE to bypass Directory check
-            python "$SR_PATH" -d1 "$GITHUB_WORKSPACE/examples/factory_demo/sdkconfig" -d2 "$(dirname "$SR_PATH")" -d3 "./build"
+            # Use local PWD to point exactly to the sdkconfig file
+            python "$SR_PATH" -d1 "$PWD/sdkconfig" -d2 "$(dirname "$SR_PATH")" -d3 "./build"
             cp build/srmodels/srmodels.bin build/model.bin || echo "Model failed"
             
-            # 4. Generate Storage binary (Fixing Path Error)
-            # Locate the specific partition args for storage (not project)
-            ARG_FILE=$(find build/ -name "flash_storage_args" | head -n 1)
-            python -m esptool --chip esp32s3 merge_bin -o build/storage.bin @$ARG_FILE
+            # 4. Generate Storage binary (UI Graphics)
+            # Dynamically find the correct flash arguments for the storage partition
+            STORAGE_ARGS=$(find build/ -name "flash_storage_args" | head -n 1)
+            python -m esptool --chip esp32s3 merge_bin -o build/storage.bin @$STORAGE_ARGS
