@@ -20,8 +20,8 @@ jobs:
           path: examples/factory_demo
           command: |
             set -e
-            # 1. Clean and Setup SDKCONFIG (Force Original BOX & DIO mode)
             rm -f sdkconfig.defaults* sdkconfig
+            
             cat <<EOF > sdkconfig.defaults
             CONFIG_ESP_BOX_BOARD_S3_BOX=y
             CONFIG_ESP_BOX_BOARD_S3_BOX_3=n
@@ -33,9 +33,7 @@ jobs:
             CONFIG_COMPILER_WARNINGS_AS_ERRORS=n
             EOF
 
-            # 2. Setup Partition Table (Matches your log offsets)
             cat <<EOF > partitions.csv
-            # Name, Type, SubType, Offset, Size
             nvs,      data, nvs,     ,        0x6000,
             otadata,  data, ota,     ,        0x2000,
             phy_init, data, phy,     ,        0x1000,
@@ -44,11 +42,7 @@ jobs:
             model,    data, spiffs,  0x6c4000,0x866000,
             EOF
 
-            # 3. Build (Path is relative to the Action's 'path' input)
             idf.py build
-
-            # 4. Generate Storage Binary (Explicit path to graphics)
-            # 0x28a000 is the size defined in partitions.csv
             python /opt/esp/idf/components/spiffs/spiffsgen.py 0x28a000 image build/storage.bin
 
       - name: Upload artifacts
