@@ -5,36 +5,35 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout esp-box
+      - name: Checkout esp-box repository
         uses: actions/checkout@v4
         with:
           repository: 'espressif/esp-box'
           submodules: 'recursive'
 
-      - name: Build and Generate Binaries
+      - name: Build and Generate Compatible Binaries
         uses: espressif/esp-idf-ci-action@v1
         with:
           esp_idf_version: v5.3
           target: esp32s3
           path: 'examples/factory_demo'
           command: |
-            # 1. Hardware Compatibility for v0.1 Original S3-BOX
+            # 1. Force Original Board Profile and DIO Flash Mode
             echo "CONFIG_ESP_BOX_BOARD_S3_BOX=y" >> sdkconfig.defaults
             echo "CONFIG_ESP_BOX_BOARD_S3_BOX_3=n" >> sdkconfig.defaults
             echo "CONFIG_ESPTOOLPY_FLASHMODE_DIO=y" >> sdkconfig.defaults
             echo "CONFIG_ESPTOOLPY_FLASHMODE_OPI=n" >> sdkconfig.defaults
             
-            # 2. Build the project
+            # 2. Build Project
             idf.py build
             
             # 3. Generate Model binary (Voice AI)
-            # Find movemodel.py relative to the current project directory
+            # Use absolute path to the FILE to prevent the NotADirectoryError
             SR_PATH=$(find ./managed_components -name "movemodel.py" | head -n 1)
-            # Use local PWD to point exactly to the sdkconfig file
-            python "$SR_PATH" -d1 "$PWD/sdkconfig" -d2 "$(dirname "$SR_PATH")" -d3 "./build"
+            python "$SR_PATH" -d1 "$PWD/sdkconfig" -d2 "$(dirname "$SR_PATH")" -d3 "$PWD/build"
             cp build/srmodels/srmodels.bin build/model.bin || echo "Model failed"
             
             # 4. Generate Storage binary (UI Graphics)
-            # Dynamically find the correct flash arguments for the storage partition
+            # Find the specific flash arguments for the storage partition
             STORAGE_ARGS=$(find build/ -name "flash_storage_args" | head -n 1)
             python -m esptool --chip esp32s3 merge_bin -o build/storage.bin @$STORAGE_ARGS
