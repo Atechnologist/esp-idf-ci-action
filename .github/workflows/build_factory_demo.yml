@@ -18,14 +18,23 @@ jobs:
           target: esp32s3
           path: 'examples/factory_demo'
           command: |
+            # 1. Enter the specific example folder
             cd examples/factory_demo
-            rm -f sdkconfig.defaults.s3_box_3
+            
+            # 2. Clean old configs and remove BOX-3 defaults
+            rm -f sdkconfig sdkconfig.defaults.s3_box_3
+            
+            # 3. Force Original BOX Profile (Matches v0.1 chip)
             echo "CONFIG_ESP_BOX_BOARD_S3_BOX=y" > sdkconfig.defaults
             echo "CONFIG_ESP_BOX_BOARD_S3_BOX_3=n" >> sdkconfig.defaults
             echo "CONFIG_ESPTOOLPY_FLASHMODE_DIO=y" >> sdkconfig.defaults
             echo "CONFIG_ESPTOOLPY_FLASHMODE_OPI=n" >> sdkconfig.defaults
+            
+            # 4. Build fresh
             idf.py build
-            python /opt/esp/idf/components/spiffs/spiffsgen.py 0x28a000 image build/storage.bin
+            
+            # 5. Generate Storage bin using absolute path for the 'image' folder
+            python /opt/esp/idf/components/spiffs/spiffsgen.py 0x28a000 ./image build/storage.bin
 
       - name: Upload Binaries
         uses: actions/upload-artifact@v4
