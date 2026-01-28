@@ -6,17 +6,17 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-22.04   # 🔥 CRITICAL FIX
+    runs-on: ubuntu-22.04   # 🔥 DO NOT CHANGE (GCC compatibility)
 
     steps:
-      - name: Checkout esp-box
+      - name: Checkout esp-box repository
         uses: actions/checkout@v4
         with:
           repository: espressif/esp-box
           submodules: recursive
           fetch-depth: 1
 
-      - name: Build ESP-BOX factory_demo
+      - name: Build ESP-BOX factory_demo (FULL DEBUG)
         uses: espressif/esp-idf-ci-action@v1
         with:
           esp_idf_version: v5.3
@@ -25,9 +25,11 @@ jobs:
           command: |
             set -e
 
+            echo "=== CLEAN CONFIG ==="
             rm -f sdkconfig.defaults*
             rm -f partitions.csv
 
+            echo "=== SDKCONFIG ==="
             cat <<EOF > sdkconfig.defaults
             CONFIG_ESP_BOX_BOARD_S3_BOX=y
             CONFIG_ESP_BOX_BOARD_S3_BOX_3=n
@@ -42,6 +44,7 @@ jobs:
             CONFIG_COMPILER_WARNINGS_AS_ERRORS=n
             EOF
 
+            echo "=== PARTITION TABLE ==="
             cat <<EOF > partitions.csv
             # Name, Type, SubType, Offset, Size
             nvs,data,nvs,0x9000,24K
@@ -51,33 +54,42 @@ jobs:
             spiffs,data,spiffs,,2M
             EOF
 
+            echo "=== BUILD START ==="
             idf.py build || {
-            echo ""
-            echo "========== ESP-IDF BUILD FAILED =========="
-            echo ""
-          
-            echo "--- STDERR ---"
-            cat build/log/idf_py_stderr_output_* || echo "No stderr log"
-          
-            echo ""
-            echo "--- STDOUT ---"
-            cat build/log/idf_py_stdout_output_* || echo "No stdout log"
-          
-            echo ""
-            echo "--- NINJA LOG (if exists) ---"
-            cat build/build.ninja || true
-          
-            exit 1 }
+              echo ""
+              echo "========== ESP-IDF BUILD FAILED =========="
+              echo ""
 
+              echo "--- STDERR LOG ---"
+              cat build/log/idf_py_stderr_output_* || echo "No stderr log"
 
-            # ---- SPIFFS ----
+              echo ""
+              echo "--- STDOUT LOG ---"
+              cat build/log/idf_py_stdout_output_* || echo "No stdout log"
+
+              echo ""
+              echo "--- CMAKE ERROR LOG ---"
+              cat build/CMakeFiles/CMakeError.log || true
+
+              echo ""
+              echo "--- CMAKE OUTPUT LOG ---"
+              cat build/CMakeFiles/CMakeOutput.log || true
+
+              exit 1
+            }
+
+            echo "=== SPIFFS GENERATION ==="
             SPIFFS_OFFSET=$(python $IDF_PATH/components/partition_table/gen_esp32part.py \
               build/partition_table/partition-table.bin | awk '/spiffs/ {print $4}')
+
+            echo "SPIFFS OFFSET = $SPIFFS_OFFSET"
 
             python $IDF_PATH/components/spiffs/spiffsgen.py \
               $SPIFFS_OFFSET image build/storage.bin
 
-      - name: Upload firmware
+            echo "=== BUILD COMPLETE ==="
+
+      - name: Upload firmware artifacts
         uses: actions/upload-artifact@v4
         with:
           name: esp-box-original-factory-demo
