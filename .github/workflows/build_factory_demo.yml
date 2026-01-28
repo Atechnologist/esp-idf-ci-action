@@ -29,15 +29,20 @@ jobs:
             rm -f sdkconfig.defaults*
             rm -f partitions.csv
 
-            # ---- sdkconfig ----
             cat <<EOF > sdkconfig.defaults
             CONFIG_ESP_BOX_BOARD_S3_BOX=y
             CONFIG_ESP_BOX_BOARD_S3_BOX_3=n
+            
+            # Flash configuration (CRITICAL)
             CONFIG_ESPTOOLPY_FLASHMODE_DIO=y
-            CONFIG_ESPTOOLPY_FLASHMODE_OPI=n
+            CONFIG_ESPTOOLPY_FLASHFREQ_80M=y
+            CONFIG_ESPTOOLPY_FLASHSIZE_8MB=y
+            
+            # Custom partition table
             CONFIG_PARTITION_TABLE_CUSTOM=y
             CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
             EOF
+
 
           
  
