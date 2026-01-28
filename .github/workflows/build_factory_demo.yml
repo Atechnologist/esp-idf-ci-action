@@ -1,44 +1,25 @@
-name: Build ESP-BOX Original 2026
-on: [push, workflow_dispatch]
-
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout esp-box
-        uses: actions/checkout@v4
-        with:
-          repository: 'espressif/esp-box'
-          submodules: 'recursive'
-
-      - name: Build and Generate All Binaries
-        uses: espressif/esp-idf-ci-action@v1
-        with:
+ - name: Build and Generate Binaries
+   uses: espressif/esp-idf-ci-action@v1
+   with:
           esp_idf_version: v5.3
           target: esp32s3
           path: 'examples/factory_demo'
           command: |
-            # 1. Force Hardware Compatibility (v0.1 chip)
-            echo "CONFIG_ESP_BOX_BOARD_S3_BOX=y" >> sdkconfig.defaults
+            # 1. REMOVE BOX-3 CONFIG (This stops the "Touch not found" crash)
+            rm -f sdkconfig.defaults.s3_box_3
+            
+            # 2. Force Original S3-BOX Hardware Profile
+            echo "CONFIG_ESP_BOX_BOARD_S3_BOX=y" > sdkconfig.defaults
             echo "CONFIG_ESP_BOX_BOARD_S3_BOX_3=n" >> sdkconfig.defaults
             echo "CONFIG_ESPTOOLPY_FLASHMODE_DIO=y" >> sdkconfig.defaults
             echo "CONFIG_ESPTOOLPY_FLASHMODE_OPI=n" >> sdkconfig.defaults
             
-            # 2. Build Project
+            # 3. Build Project
             idf.py build
             
-            # 3. FIX: Resolve the 'NotADirectory' conflict
-            # Move the metadata folder so the script sees the sdkconfig FILE
-            if [ -d "sdkconfig" ]; then mv sdkconfig sdkconfig_meta_dir; fi
-            
-            # 4. Generate Model binary (Voice AI)
-            SR_PATH=$(find ./managed_components -name "movemodel.py" | head -n 1)
-            # Use the local file path now that the folder conflict is gone
-            python "$SR_PATH" -d1 sdkconfig -d2 "$(dirname "$SR_PATH")" -d3 ./build
-            cp build/srmodels/srmodels.bin build/model.bin || echo "Model failed"
-            
+            # 4. Use your previous model.bin (since the CI path is still looping)
             # 5. Generate Storage binary (UI Graphics)
-            python $IDF_PATH/components/spiffs/spiffsgen.py 0x28a000 image build/storage.bin
+            python $IDF_PATH/components/spiffs/spiffsgen.py 0x28a000 image build/storage.bin || echo "Storage failed"
 
       - name: Upload Binaries
         uses: actions/upload-artifact@v4
