@@ -18,22 +18,13 @@ jobs:
           target: esp32s3
           path: 'examples/factory_demo'
           command: |
-            # 1. DELETE BOX-3 DEFAULTS (Prevents the Touch not found crash)
             rm -f sdkconfig.defaults.s3_box_3
-            
-            # 2. FORCE ORIGINAL BOX CONFIG (Matches v0.1 chip)
-            # We use '>' to overwrite any existing defaults
             echo "CONFIG_ESP_BOX_BOARD_S3_BOX=y" > sdkconfig.defaults
             echo "CONFIG_ESP_BOX_BOARD_S3_BOX_3=n" >> sdkconfig.defaults
             echo "CONFIG_ESPTOOLPY_FLASHMODE_DIO=y" >> sdkconfig.defaults
             echo "CONFIG_ESPTOOLPY_FLASHMODE_OPI=n" >> sdkconfig.defaults
-            
-            # 3. Build the project
             idf.py build
-            
-            # 4. Generate Storage binary (UI Graphics)
-            # This generates the bin at the root of the path defined above
-            python $IDF_PATH/components/spiffs/spiffsgen.py 0x28a000 image build/storage.bin || echo "Storage failed"
+            python /opt/esp/idf/components/spiffs/spiffsgen.py 0x28a000 image build/storage.bin
 
       - name: Upload Binaries
         uses: actions/upload-artifact@v4
