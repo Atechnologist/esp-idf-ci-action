@@ -1,24 +1,38 @@
- - name: Build and Generate Binaries
-   uses: espressif/esp-idf-ci-action@v1
-   with:
+name: Build ESP-BOX Original 2026
+on: [push, workflow_dispatch]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout esp-box repository
+        uses: actions/checkout@v4
+        with:
+          repository: 'espressif/esp-box'
+          submodules: 'recursive'
+
+      - name: Build and Generate Binaries
+        uses: espressif/esp-idf-ci-action@v1
+        with:
           esp_idf_version: v5.3
           target: esp32s3
           path: 'examples/factory_demo'
           command: |
-            # 1. REMOVE BOX-3 CONFIG (This stops the "Touch not found" crash)
+            # 1. DELETE BOX-3 DEFAULTS (Prevents the Touch not found crash)
             rm -f sdkconfig.defaults.s3_box_3
             
-            # 2. Force Original S3-BOX Hardware Profile
+            # 2. FORCE ORIGINAL BOX CONFIG (Matches v0.1 chip)
+            # We use '>' to overwrite any existing defaults
             echo "CONFIG_ESP_BOX_BOARD_S3_BOX=y" > sdkconfig.defaults
             echo "CONFIG_ESP_BOX_BOARD_S3_BOX_3=n" >> sdkconfig.defaults
             echo "CONFIG_ESPTOOLPY_FLASHMODE_DIO=y" >> sdkconfig.defaults
             echo "CONFIG_ESPTOOLPY_FLASHMODE_OPI=n" >> sdkconfig.defaults
             
-            # 3. Build Project
+            # 3. Build the project
             idf.py build
             
-            # 4. Use your previous model.bin (since the CI path is still looping)
-            # 5. Generate Storage binary (UI Graphics)
+            # 4. Generate Storage binary (UI Graphics)
+            # This generates the bin at the root of the path defined above
             python $IDF_PATH/components/spiffs/spiffsgen.py 0x28a000 image build/storage.bin || echo "Storage failed"
 
       - name: Upload Binaries
@@ -31,4 +45,3 @@
             examples/factory_demo/build/ota_data_initial.bin
             examples/factory_demo/build/factory_demo.bin
             examples/factory_demo/build/storage.bin
-            examples/factory_demo/build/model.bin
