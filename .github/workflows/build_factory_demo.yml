@@ -6,7 +6,7 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04   # 🔥 CRITICAL FIX
 
     steps:
       - name: Checkout esp-box
@@ -23,9 +23,10 @@ jobs:
           target: esp32s3
           path: examples/factory_demo
           command: |
-            set -e   # 🔥 DO NOT ALLOW SILENT FAILURES
+            set -e
 
             rm -f sdkconfig.defaults*
+            rm -f partitions.csv
 
             cat <<EOF > sdkconfig.defaults
             CONFIG_ESP_BOX_BOARD_S3_BOX=y
@@ -42,7 +43,7 @@ jobs:
             EOF
 
             cat <<EOF > partitions.csv
-            # Name, Type, SubType, Offset, Size, Flags
+            # Name, Type, SubType, Offset, Size
             nvs,data,nvs,0x9000,24K
             phy_init,data,phy,0xf000,4K
             ota_data,data,ota,0x10000,8K
@@ -50,18 +51,22 @@ jobs:
             spiffs,data,spiffs,,2M
             EOF
 
-            idf.py build
+            # ---- Build (show errors if it fails) ----
+            idf.py build || {
+              echo "====== BUILD FAILED ======"
+              cat build/log/idf_py_stderr_output_* || true
+              cat build/log/idf_py_stdout_output_* || true
+              exit 1
+            }
 
-            # ---- Generate SPIFFS at CORRECT OFFSET ----
+            # ---- SPIFFS ----
             SPIFFS_OFFSET=$(python $IDF_PATH/components/partition_table/gen_esp32part.py \
               build/partition_table/partition-table.bin | awk '/spiffs/ {print $4}')
-
-            echo "SPIFFS OFFSET = $SPIFFS_OFFSET"
 
             python $IDF_PATH/components/spiffs/spiffsgen.py \
               $SPIFFS_OFFSET image build/storage.bin
 
-      - name: Upload Binaries
+      - name: Upload firmware
         uses: actions/upload-artifact@v4
         with:
           name: esp-box-original-factory-demo
