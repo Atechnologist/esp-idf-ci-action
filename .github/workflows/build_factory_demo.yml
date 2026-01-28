@@ -1,44 +1,59 @@
 name: Build ESP-BOX Original 2026
-on: [push, workflow_dispatch]
+
+on:
+  push:
+  workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout esp-box repository
         uses: actions/checkout@v4
         with:
-          repository: 'espressif/esp-box'
-          submodules: 'recursive'
+          repository: espressif/esp-box
+          submodules: recursive
+          fetch-depth: 1
 
       - name: Build and Generate Binaries
         uses: espressif/esp-idf-ci-action@v1
         with:
           esp_idf_version: v5.3
           target: esp32s3
-          path: 'examples/factory_demo'
+          path: examples/factory_demo
           command: |
-            # 1. Clean and Setup Board Config using absolute paths
-            rm -f examples/factory_demo/sdkconfig.defaults.s3_box_3
-            echo "CONFIG_ESP_BOX_BOARD_S3_BOX=y" > examples/factory_demo/sdkconfig.defaults
-            echo "CONFIG_ESP_BOX_BOARD_S3_BOX_3=n" >> examples/factory_demo/sdkconfig.defaults
-            echo "CONFIG_ESPTOOLPY_FLASHMODE_DIO=y" >> examples/factory_demo/sdkconfig.defaults
-            echo "CONFIG_ESPTOOLPY_FLASHMODE_OPI=n" >> examples/factory_demo/sdkconfig.defaults
-            
-            # 2. Run the build (The action handles the path internally)
-            idf.py build
-            
-            # 3. Generate Storage bin using the ABSOLUTE path to the image folder
-            # The workspace is always at /github/workspace in this action
-            python /opt/esp/idf/components/spiffs/spiffsgen.py 0x28a000 /github/workspace/examples/factory_demo/image examples/factory_demo/build/storage.bin
+            set -e
 
-      - name: Upload Binaries
+            rm -f sdkconfig.defaults*
+
+            cat <<EOF > sdkconfig.defaults
+            CONFIG_ESP_BOX_BOARD_S3_BOX=y
+            CONFIG_ESP_BOX_BOARD_S3_BOX_3=n
+            CONFIG_ESPTOOLPY_FLASHMODE_DIO=y
+            CONFIG_ESPTOOLPY_FLASHMODE_OPI=n
+            EOF
+
+            idf.py build
+
+            # Extract SPIFFS offset dynamically
+            SPIFFS_OFFSET=$(python $IDF_PATH/components/partition_table/gen_esp32part.py \
+              build/partition_table/partition-table.bin \
+              | awk '/spiffs/ {print $4}')
+
+            echo "SPIFFS offset: $SPIFFS_OFFSET"
+
+            python $IDF_PATH/components/spiffs/spiffsgen.py \
+              $SPIFFS_OFFSET \
+              image \
+              build/storage.bin
+
+      - name: Upload firmware bundle
         uses: actions/upload-artifact@v4
         with:
-          name: esp-box-v0.1-bundle
+          name: esp-box-original-factory-demo
           path: |
             examples/factory_demo/build/bootloader/bootloader.bin
             examples/factory_demo/build/partition_table/partition-table.bin
             examples/factory_demo/build/ota_data_initial.bin
-            examples/factory_demo/build/factory_demo.bin
-            examples/factory_demo/build/storage.bin
+            examples/factory_demo/build/*.bin
