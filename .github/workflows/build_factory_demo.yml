@@ -39,15 +39,18 @@ jobs:
             CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
             EOF
 
-            # ---- partition table (VALID) ----
+          
+ 
+            # ---- partition table (ALIGNED + SAFE) ----
             cat <<EOF > partitions.csv
             # Name, Type, SubType, Offset, Size, Flags
             nvs,data,nvs,0x9000,24K
             phy_init,data,phy,0xf000,4K
             ota_data,data,ota,0x10000,8K
-            factory,app,factory,0x12000,1M
-            spiffs,data,spiffs,,1M
+            factory,app,factory,0x20000,2M
+            spiffs,data,spiffs,,2M
             EOF
+
 
             # ---- Build ----
             idf.py build
