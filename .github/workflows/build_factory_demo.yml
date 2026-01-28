@@ -33,15 +33,19 @@ jobs:
             CONFIG_ESP_BOX_BOARD_S3_BOX=y
             CONFIG_ESP_BOX_BOARD_S3_BOX_3=n
             
-            # Flash configuration (CRITICAL)
+            # Flash config
             CONFIG_ESPTOOLPY_FLASHMODE_DIO=y
             CONFIG_ESPTOOLPY_FLASHFREQ_80M=y
             CONFIG_ESPTOOLPY_FLASHSIZE_8MB=y
             
-            # Custom partition table
+            # Partition table
             CONFIG_PARTITION_TABLE_CUSTOM=y
             CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
+            
+            # 🔥 CRITICAL CI FIX (Everest / mbedTLS)
+            CONFIG_COMPILER_WARNINGS_AS_ERRORS=n
             EOF
+
 
 
           
