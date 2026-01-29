@@ -1,53 +1,91 @@
 name: Build ESP-BOX Original 2026
-on: [push, workflow_dispatch]
+
+on:
+  push:
+  workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Checkout esp-box
+      - name: Checkout esp-box repository
         uses: actions/checkout@v4
         with:
-          repository: 'espressif/esp-box'
-          submodules: 'recursive'
+          repository: espressif/esp-box
+          submodules: recursive
 
-      - name: Build and Generate Binaries
+      - name: Build ESP-BOX v0.1 firmware
         uses: espressif/esp-idf-ci-action@v1
         with:
           esp_idf_version: v5.3
           target: esp32s3
-          path: 'examples/factory_demo'
+          path: examples/factory_demo
           command: |
-            # 1. Force Original ESP-BOX Board and DIO mode for v0.1 chip compatibility
+            set -e
+
+            echo "===== ESP-BOX v0.1 FIXES ====="
+
+            # --------------------------------------------------
+            # 1. Force ORIGINAL ESP-BOX (NOT ESP-BOX-3)
+            # --------------------------------------------------
             echo "CONFIG_ESP_BOX_BOARD_S3_BOX=y" >> sdkconfig.defaults
             echo "CONFIG_ESP_BOX_BOARD_S3_BOX_3=n" >> sdkconfig.defaults
+
+            # --------------------------------------------------
+            # 2. Correct flash mode for v0.1 hardware
+            # --------------------------------------------------
             echo "CONFIG_ESPTOOLPY_FLASHMODE_DIO=y" >> sdkconfig.defaults
             echo "CONFIG_ESPTOOLPY_FLASHMODE_OPI=n" >> sdkconfig.defaults
-            
-            # Disable touch completely (ESP-BOX v0.1 has no ESP-BOX-3 touch)
+
+            # --------------------------------------------------
+            # 3. Disable touch completely (v0.1 has NO touch IC)
+            # --------------------------------------------------
             echo "CONFIG_ESP_BOX_TOUCH_SUPPORT=n" >> sdkconfig.defaults
             echo "CONFIG_BSP_TOUCH_SUPPORT=n" >> sdkconfig.defaults
 
-            # 2. Build Project
+            # --------------------------------------------------
+            # 4. HARD FIX: REMOVE ESP-BOX-3 BSP (CRITICAL)
+            # --------------------------------------------------
+            rm -rf managed_components/espressif__esp-box-3
+
+            echo "===== BUILD ====="
             idf.py build
-            
-            # 3. Generate Model binary (Voice AI)
-            # Use the absolute file path to the sdkconfig FILE to prevent Errno 20
-            SR_PATH=$(find ./managed_components -name "movemodel.py" | head -n 1)
-            python "$SR_PATH" -d1 "$GITHUB_WORKSPACE/examples/factory_demo/sdkconfig" -d2 "$(dirname "$SR_PATH")" -d3 "$GITHUB_WORKSPACE/examples/factory_demo/build"
-            cp build/srmodels/srmodels.bin build/model.bin || echo "Model copy failed"
-            
-            # 4. Generate Storage binary (UI Graphics)
-            # Manual merge if flash_storage_args is missing
-            python $IDF_PATH/components/esptool_py/esptool/esptool.py --chip esp32s3 merge_bin -o build/storage.bin @build/flash_storage_args || echo "Storage failed"
-      - name: Upload Binaries
+
+            # --------------------------------------------------
+            # 5. Generate MODEL partition (Voice AI)
+            # --------------------------------------------------
+            SR_PATH=$(find managed_components -name movemodel.py | head -n 1)
+            if [ -n "$SR_PATH" ]; then
+              python "$SR_PATH" \
+                -d1 "$GITHUB_WORKSPACE/examples/factory_demo/sdkconfig" \
+                -d2 "$(dirname "$SR_PATH")" \
+                -d3 "$GITHUB_WORKSPACE/examples/factory_demo/build"
+              cp build/srmodels/srmodels.bin build/model.bin
+            else
+              echo "movemodel.py not found – skipping model.bin"
+            fi
+
+            # --------------------------------------------------
+            # 6. Generate STORAGE partition (UI assets)
+            # --------------------------------------------------
+            if [ -f build/flash_storage_args ]; then
+              python $IDF_PATH/components/esptool_py/esptool/esptool.py \
+                --chip esp32s3 merge_bin \
+                -o build/storage.bin \
+                @build/flash_storage_args
+            else
+              echo "flash_storage_args missing – storage.bin not generated"
+            fi
+
+      - name: Upload firmware artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: esp-box-v0.1-bundle
+          name: esp-box-v0.1-firmware
           path: |
             examples/factory_demo/build/bootloader/bootloader.bin
             examples/factory_demo/build/partition_table/partition-table.bin
             examples/factory_demo/build/ota_data_initial.bin
             examples/factory_demo/build/factory_demo.bin
-            examples/factory_demo/build/storage.bin
             examples/factory_demo/build/model.bin
+            examples/factory_demo/build/storage.bin
