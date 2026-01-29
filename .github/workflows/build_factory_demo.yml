@@ -1,4 +1,4 @@
-name: Build ESP-BOX Factory Demo
+name: Build ESP-BOX-3 Firmware
 
 on:
   push:
@@ -9,7 +9,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout ESP-BOX repo
+      - name: Checkout ESP-BOX
         uses: actions/checkout@v4
         with:
           repository: espressif/esp-box
@@ -23,10 +23,41 @@ jobs:
           target: esp32s3
           path: esp-box/examples/factory_demo
           command: |
-            echo "CONFIG_ESP_BOX_BOARD_S3_BOX=y" >> sdkconfig.defaults
-            echo "CONFIG_ESP_BOX_BOARD_S3_BOX_3=n" >> sdkconfig.defaults
+            # -----------------------------
+            # Board + Flash configuration
+            # -----------------------------
+            echo "CONFIG_ESP_BOX_BOARD_S3_BOX_3=y" >> sdkconfig.defaults
+            echo "CONFIG_ESP_BOX_BOARD_S3_BOX=n" >> sdkconfig.defaults
+
             echo "CONFIG_ESPTOOLPY_FLASHMODE_DIO=y" >> sdkconfig.defaults
             echo "CONFIG_ESPTOOLPY_FLASHMODE_OPI=n" >> sdkconfig.defaults
+            echo "CONFIG_SPIRAM_MODE_OCT=y" >> sdkconfig.defaults
+
+            # -----------------------------
+            # CI safety (no hardware)
+            # -----------------------------
+            echo "CONFIG_BSP_TOUCH_ENABLED=n" >> sdkconfig.defaults
+            echo "CONFIG_ESP_SR_MODEL_LOAD=n" >> sdkconfig.defaults
 
             idf.py reconfigure
             idf.py build
+
+            # -----------------------------
+            # Optional: model.bin fallback
+            # -----------------------------
+            if [ -f build/srmodels/srmodels.bin ]; then
+              cp build/srmodels/srmodels.bin build/model.bin
+            fi
+
+      - name: Upload flashable firmware bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: esp-box-3-flash-bundle
+          path: |
+            esp-box/examples/factory_demo/build/bootloader/bootloader.bin
+            esp-box/examples/factory_demo/build/partition_table/partition-table.bin
+            esp-box/examples/factory_demo/build/ota_data_initial.bin
+            esp-box/examples/factory_demo/build/factory_demo.bin
+            esp-box/examples/factory_demo/build/storage.bin
+            esp-box/examples/factory_demo/build/model.bin
+            esp-box/examples/factory_demo/build/flash_args
