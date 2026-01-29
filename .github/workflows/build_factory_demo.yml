@@ -9,54 +9,24 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout ESP-BOX repository
-      uses: actions/checkout@v4
-      with:
-        repository: espressif/esp-box
-        ref: master
-        path: esp-box
-        submodules: recursive
+      - name: Checkout ESP-BOX repo
+        uses: actions/checkout@v4
+        with:
+          repository: espressif/esp-box
+          submodules: recursive
+          path: esp-box
 
-    - name: Setup ESP-IDF
-      uses: espressif/esp-idf-ci-action@v1
-      with:
-        esp_idf_version: v5.3
-        target: esp32s3
+      - name: Build with ESP-IDF
+        uses: espressif/esp-idf-ci-action@v1
+        with:
+          esp_idf_version: v5.3
+          target: esp32s3
+          path: esp-box/examples/factory_demo
+          command: |
+            echo "CONFIG_ESP_BOX_BOARD_S3_BOX=y" >> sdkconfig.defaults
+            echo "CONFIG_ESP_BOX_BOARD_S3_BOX_3=n" >> sdkconfig.defaults
+            echo "CONFIG_ESPTOOLPY_FLASHMODE_DIO=y" >> sdkconfig.defaults
+            echo "CONFIG_ESPTOOLPY_FLASHMODE_OPI=n" >> sdkconfig.defaults
 
-    - name: Configure ESP-BOX project
-      working-directory: esp-box/examples/factory_demo
-      run: |
-        idf.py set-target esp32s3
-
-        echo "CONFIG_ESP_BOX_BOARD_S3_BOX=y" >> sdkconfig.defaults
-        echo "CONFIG_ESP_BOX_BOARD_S3_BOX_3=n" >> sdkconfig.defaults
-        echo "CONFIG_ESPTOOLPY_FLASHMODE_DIO=y" >> sdkconfig.defaults
-        echo "CONFIG_ESPTOOLPY_FLASHMODE_OPI=n" >> sdkconfig.defaults
-
-        idf.py reconfigure
-
-    - name: Build firmware
-      working-directory: esp-box/examples/factory_demo
-      run: |
-        idf.py build
-
-    - name: Generate SR model (fix sdkconfig path)
-      working-directory: esp-box/examples/factory_demo
-      run: |
-        SR_PATH=$(find managed_components -name movemodel.py | head -n 1)
-        python "$SR_PATH" \
-          -d1 "$PWD/sdkconfig" \
-          -d2 "$(dirname "$SR_PATH")" \
-          -d3 "$PWD/build"
-
-    - name: Upload binaries
-      uses: actions/upload-artifact@v4
-      with:
-        name: esp-box-factory-demo
-        path: |
-          esp-box/examples/factory_demo/build/bootloader/bootloader.bin
-          esp-box/examples/factory_demo/build/partition_table/partition-table.bin
-          esp-box/examples/factory_demo/build/ota_data_initial.bin
-          esp-box/examples/factory_demo/build/factory_demo.bin
-          esp-box/examples/factory_demo/build/storage.bin
-          esp-box/examples/factory_demo/build/srmodels/srmodels.bin
+            idf.py reconfigure
+            idf.py build
