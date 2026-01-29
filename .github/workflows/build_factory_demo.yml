@@ -1,63 +1,64 @@
-name: Build ESP-BOX-3 Firmware
-
-on:
-  push:
-  workflow_dispatch:
+name: Build ESP-BOX Original 2026
+on: [push, workflow_dispatch]
 
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout ESP-BOX
+      # 1️⃣ Checkout the ESP-BOX repository
+      - name: Checkout esp-box
         uses: actions/checkout@v4
         with:
-          repository: espressif/esp-box
-          submodules: recursive
-          path: esp-box
+          repository: 'espressif/esp-box'
+          submodules: 'recursive'
 
-      - name: Build with ESP-IDF
+      # 2️⃣ Build and generate binaries
+      - name: Build and Generate Binaries
         uses: espressif/esp-idf-ci-action@v1
         with:
           esp_idf_version: v5.3
           target: esp32s3
-          path: esp-box/examples/factory_demo
+          path: 'examples/factory_demo'
           command: |
-            # -----------------------------
-            # Board + Flash configuration
-            # -----------------------------
-            echo "CONFIG_ESP_BOX_BOARD_S3_BOX_3=y" >> sdkconfig.defaults
-            echo "CONFIG_ESP_BOX_BOARD_S3_BOX=n" >> sdkconfig.defaults
-
+            # ------------------------------
+            # 2.1 Force ESP-BOX Board + DIO mode
+            # ------------------------------
+            echo "CONFIG_ESP_BOX_BOARD_S3_BOX=y" >> sdkconfig.defaults
+            echo "CONFIG_ESP_BOX_BOARD_S3_BOX_3=n" >> sdkconfig.defaults
             echo "CONFIG_ESPTOOLPY_FLASHMODE_DIO=y" >> sdkconfig.defaults
             echo "CONFIG_ESPTOOLPY_FLASHMODE_OPI=n" >> sdkconfig.defaults
-            echo "CONFIG_SPIRAM_MODE_OCT=y" >> sdkconfig.defaults
 
-            # -----------------------------
-            # CI safety (no hardware)
-            # -----------------------------
+            # ------------------------------
+            # 2.2 Disable touch for CI builds
+            # ------------------------------
             echo "CONFIG_BSP_TOUCH_ENABLED=n" >> sdkconfig.defaults
-            echo "CONFIG_ESP_SR_MODEL_LOAD=n" >> sdkconfig.defaults
 
-            idf.py reconfigure
+            # ------------------------------
+            # 2.3 Build project
+            # ------------------------------
             idf.py build
 
-            # -----------------------------
-            # Optional: model.bin fallback
-            # -----------------------------
-            if [ -f build/srmodels/srmodels.bin ]; then
-              cp build/srmodels/srmodels.bin build/model.bin
-            fi
+            # ------------------------------
+            # 2.4 Generate model binary (Voice AI)
+            # ------------------------------
+            SR_PATH=$(find ./managed_components -name "movemodel.py" | head -n 1)
+            python "$SR_PATH" -d1 "$GITHUB_WORKSPACE/examples/factory_demo/sdkconfig" -d2 "$(dirname "$SR_PATH")" -d3 "$GITHUB_WORKSPACE/examples/factory_demo/build"
+            cp build/srmodels/srmodels.bin build/model.bin || echo "Model copy failed"
 
-      - name: Upload flashable firmware bundle
+            # ------------------------------
+            # 2.5 Generate storage binary (UI graphics)
+            # ------------------------------
+            python $IDF_PATH/components/esptool_py/esptool/esptool.py --chip esp32s3 merge_bin -o build/storage.bin @build/flash_storage_args || echo "Storage merge failed"
+
+      # 3️⃣ Upload generated binaries
+      - name: Upload Binaries
         uses: actions/upload-artifact@v4
         with:
-          name: esp-box-3-flash-bundle
+          name: esp-box-v0.1-bundle
           path: |
-            esp-box/examples/factory_demo/build/bootloader/bootloader.bin
-            esp-box/examples/factory_demo/build/partition_table/partition-table.bin
-            esp-box/examples/factory_demo/build/ota_data_initial.bin
-            esp-box/examples/factory_demo/build/factory_demo.bin
-            esp-box/examples/factory_demo/build/storage.bin
-            esp-box/examples/factory_demo/build/model.bin
-            esp-box/examples/factory_demo/build/flash_args
+            examples/factory_demo/build/bootloader/bootloader.bin
+            examples/factory_demo/build/partition_table/partition-table.bin
+            examples/factory_demo/build/ota_data_initial.bin
+            examples/factory_demo/build/factory_demo.bin
+            examples/factory_demo/build/storage.bin
+            examples/factory_demo/build/model.bin
