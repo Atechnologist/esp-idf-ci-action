@@ -9,6 +9,10 @@ jobs:
   build:
     runs-on: ubuntu-latest
 
+    env:
+      IDF_SKIP_SUBMODULES: "1"
+      ESP_IDF_VERSION: "release/v5.3"
+
     steps:
     # ------------------------------------------------------------
     # 1. Checkout YOUR repo (no submodules)
@@ -28,61 +32,64 @@ jobs:
         python-version: "3.11"
 
     # ------------------------------------------------------------
-    # 3. Install ESP-IDF v5.3
+    # 3. Clone ESP-IDF WITHOUT submodules (CRITICAL)
     # ------------------------------------------------------------
-    - name: Install ESP-IDF
+    - name: Clone ESP-IDF (NO submodules)
       run: |
-        python -m pip install --upgrade pip
-        git clone --depth 1 -b release/v5.3 https://github.com/espressif/esp-idf.git $HOME/esp-idf
+        git clone \
+          --depth 1 \
+          --filter=blob:none \
+          --no-checkout \
+          -b $ESP_IDF_VERSION \
+          https://github.com/espressif/esp-idf.git $HOME/esp-idf
+
         cd $HOME/esp-idf
-        ./install.sh esp32s3
-        source ./export.sh
-
-    # ------------------------------------------------------------
-    # 4. Clone ESP-BOX WITHOUT submodules
-    # ------------------------------------------------------------
-    - name: Clone ESP-BOX (no submodules)
-      run: |
-        git clone --depth 1 --no-recurse-submodules https://github.com/espressif/esp-box.git
-
-    # ------------------------------------------------------------
-    # 5. HARD DISABLE OPENTHREAD INSIDE ESP-BOX
-    # ------------------------------------------------------------
-    - name: Disable OpenThread completely
-      run: |
-        cd esp-box
-
-        # Remove submodule directory if present
+        git checkout HEAD
         rm -rf components/openthread || true
 
-        # Remove git submodule references
-        git config --file .gitmodules --remove-section submodule.components/openthread/openthread || true
-        git submodule deinit -f components/openthread/openthread || true
+    # ------------------------------------------------------------
+    # 4. Install ESP-IDF tools (ESP32-S3 only)
+    # ------------------------------------------------------------
+    - name: Install ESP-IDF tools
+      run: |
+        cd $HOME/esp-idf
+        python -m pip install --upgrade pip
+        ./install.sh esp32s3
 
     # ------------------------------------------------------------
-    # 6. Apply ESP32-S3-BOX SDKConfig
+    # 5. Clone ESP-BOX repository
     # ------------------------------------------------------------
-    - name: Apply ESP32-S3-BOX SDKConfig
+    - name: Clone ESP-BOX
       run: |
+        git clone --depth 1 https://github.com/espressif/esp-box.git
+
+    # ------------------------------------------------------------
+    # 6. Apply ESP32-S3-BOX config (NO OpenThread)
+    # ------------------------------------------------------------
+    - name: Configure factory_demo
+      run: |
+        source $HOME/esp-idf/export.sh
         cd esp-box/examples/factory_demo
+
         cp sdkconfig.ci.box sdkconfig
 
-        # Explicitly disable OpenThread at config level
+        # HARD disable OpenThread
         echo "CONFIG_OPENTHREAD_ENABLED=n" >> sdkconfig
         echo "CONFIG_ESP_COEX_SW_COEXIST_ENABLE=y" >> sdkconfig
 
     # ------------------------------------------------------------
-    # 7. Build factory_demo
+    # 7. Build firmware
     # ------------------------------------------------------------
     - name: Build Factory Demo
       run: |
         source $HOME/esp-idf/export.sh
         cd esp-box/examples/factory_demo
+
         idf.py set-target esp32s3
         idf.py build
 
     # ------------------------------------------------------------
-    # 8. Upload binaries
+    # 8. Upload binaries for ESP Web Flasher
     # ------------------------------------------------------------
     - name: Upload firmware artifacts
       uses: actions/upload-artifact@v4
@@ -94,4 +101,3 @@ jobs:
           esp-box/examples/factory_demo/build/ota_data_initial.bin
           esp-box/examples/factory_demo/build/factory_demo.bin
           esp-box/examples/factory_demo/build/storage.bin
-          esp-box/examples/factory_demo/build/model.bin
