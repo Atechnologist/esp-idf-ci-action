@@ -9,20 +9,20 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      # 1. Checkout the repository and submodules
+      # 1. Checkout the repository with submodules (recursive)
       - name: Checkout repository with submodules
         uses: actions/checkout@v3
         with:
-          submodules: recursive  # pull all submodules
-          fetch-depth: 0         # full history to avoid commit mismatch
+          submodules: recursive
+          fetch-depth: 0
 
-      # 2. Set up Python (required by ESP-IDF)
+      # 2. Set up Python
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
           python-version: "3.11"
 
-      # 3. Install ESP-IDF Tools
+      # 3. Install ESP-IDF
       - name: Install ESP-IDF
         run: |
           python -m pip install --upgrade pip
@@ -31,11 +31,11 @@ jobs:
           ./install.sh
           source ./export.sh
 
-      # 4. Fix submodules (pull latest if old commit missing)
-      - name: Update Submodules to Latest
+      # 4. Initialize submodules (use pinned commit, do NOT update remote)
+      - name: Initialize Submodules
         run: |
           git submodule sync --recursive
-          git submodule update --init --recursive --remote
+          git submodule update --init --recursive
 
       # 5. Copy SDKConfig for ESP32-S3-BOX
       - name: Copy SDKConfig for CI build
@@ -49,7 +49,7 @@ jobs:
           source $HOME/esp-idf/export.sh
           idf.py build
 
-      # 7. Export all generated .bin files for flashing
+      # 7. Upload firmware binaries
       - name: Upload firmware binaries
         uses: actions/upload-artifact@v3
         with:
