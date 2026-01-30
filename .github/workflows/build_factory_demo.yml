@@ -1,44 +1,52 @@
-name: ESP32-S3-BOX CI Build
+name: Build ESP32-S3-BOX Factory Demo
 
 on:
   push:
-  pull_request:
+  workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout ESP-IDF
-      uses: actions/checkout@v4
-      with:
-        repository: espressif/esp-idf
-        ref: v5.3
-        path: esp-idf
+      # 1️⃣ Checkout ESP-BOX repository
+      - name: Checkout esp-box
+        uses: actions/checkout@v4
+        with:
+          repository: espressif/esp-box
+          submodules: recursive
 
-    - name: Install ESP-IDF dependencies
-      run: |
-        cd esp-idf
-        ./install.sh esp32s3
+      # 2️⃣ Build factory_demo for ESP32-S3-BOX (NOT BOX-3)
+      - name: Build factory_demo (ESP32-S3-BOX)
+        uses: espressif/esp-idf-ci-action@v1
+        with:
+          esp_idf_version: v5.3
+          target: esp32s3
+          path: examples/factory_demo
+          command: |
+            echo "Selecting ESP32-S3-BOX board config"
+            cp sdkconfig.ci.box sdkconfig
 
-    - name: Export ESP-IDF environment
-      run: |
-        source esp-idf/export.sh
-        echo "IDF_PATH=$PWD/esp-idf" >> $GITHUB_ENV
+            # Safety: ensure BOX-3 is disabled
+            echo "CONFIG_ESP_BOX_BOARD_S3_BOX=y" >> sdkconfig
+            echo "CONFIG_ESP_BOX_BOARD_S3_BOX_3=n" >> sdkconfig
 
-    - name: Build official ESP32-S3-BOX example
-      run: |
-        source esp-idf/export.sh
-        cd esp-idf/examples/esp32_s3_box
-        idf.py set-target esp32s3
-        idf.py build
+            # Flash compatibility for early S3 (v0.1)
+            echo "CONFIG_ESPTOOLPY_FLASHMODE_DIO=y" >> sdkconfig
+            echo "CONFIG_ESPTOOLPY_FLASHMODE_OPI=n" >> sdkconfig
 
+            idf.py set-target esp32s3
+            idf.py build
 
-    - name: Upload firmware
-      uses: actions/upload-artifact@v4
-      with:
-        name: esp32-s3-box-firmware
-        path: |
-          esp-idf/examples/boards/esp32_s3_box/build/*.bin
-          esp-idf/examples/boards/esp32_s3_box/build/*.elf
-          esp-idf/examples/boards/esp32_s3_box/build/flash_args
+      # 3️⃣ Upload firmware binaries
+      - name: Upload firmware artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: esp32-s3-box-factory-demo
+          path: |
+            examples/factory_demo/build/bootloader/bootloader.bin
+            examples/factory_demo/build/partition_table/partition-table.bin
+            examples/factory_demo/build/ota_data_initial.bin
+            examples/factory_demo/build/factory_demo.bin
+            examples/factory_demo/build/storage.bin
+            examples/factory_demo/build/model.bin
