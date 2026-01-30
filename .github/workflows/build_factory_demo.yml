@@ -1,57 +1,63 @@
 name: Build ESP32-S3-BOX Factory Demo
 
 on:
+  push:
+    branches: [main]
   workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
-      # 1. Checkout repository
-      - uses: actions/checkout@v3
+      # 1. Checkout the repository and submodules
+      - name: Checkout repository with submodules
+        uses: actions/checkout@v3
         with:
-          submodules: recursive
-          fetch-depth: 0
+          submodules: recursive  # pull all submodules
+          fetch-depth: 0         # full history to avoid commit mismatch
 
-      # 2. Setup Python
-      - uses: actions/setup-python@v4
+      # 2. Set up Python (required by ESP-IDF)
+      - name: Set up Python
+        uses: actions/setup-python@v4
         with:
-          python-version: '3.11'
+          python-version: "3.11"
 
-      # 3. Install ESP-IDF v5.3
-      - run: |
-          git clone --branch v5.3 --depth 1 https://github.com/espressif/esp-idf.git
-          cd esp-idf
+      # 3. Install ESP-IDF Tools
+      - name: Install ESP-IDF
+        run: |
+          python -m pip install --upgrade pip
+          git clone --recursive -b release/v5.3 https://github.com/espressif/esp-idf.git $HOME/esp-idf
+          cd $HOME/esp-idf
           ./install.sh
-          cd ..
+          source ./export.sh
 
-      # 4. Export ESP-IDF environment
-      - run: |
-          source esp-idf/export.sh
+      # 4. Fix submodules (pull latest if old commit missing)
+      - name: Update Submodules to Latest
+        run: |
+          git submodule sync --recursive
+          git submodule update --init --recursive --remote
 
-      # 5. Select SDKCONFIG for ESP32-S3-BOX-3
-      - run: |
+      # 5. Copy SDKConfig for ESP32-S3-BOX
+      - name: Copy SDKConfig for CI build
+        run: |
           cp examples/factory_demo/sdkconfig.ci.box-3 examples/factory_demo/sdkconfig
 
-      # 6. Build the factory_demo example
-      - run: |
+      # 6. Build factory_demo
+      - name: Build Factory Demo
+        run: |
           cd examples/factory_demo
-          idf.py fullclean
+          source $HOME/esp-idf/export.sh
           idf.py build
 
-      # 7. Copy binaries to a single folder for flash webpage
-      - run: |
-          mkdir -p flash_files
-          cp build/bootloader/bootloader.bin flash_files/
-          cp build/partition_table/partition-table.bin flash_files/
-          cp build/ota_data_initial.bin flash_files/
-          cp build/factory_demo.bin flash_files/
-          cp build/storage.bin flash_files/
-          cp build/model.bin flash_files/
-
-      # 8. Upload binaries as GitHub artifact
-      - uses: actions/upload-artifact@v3
+      # 7. Export all generated .bin files for flashing
+      - name: Upload firmware binaries
+        uses: actions/upload-artifact@v3
         with:
-          name: esp32-s3-box-firmware
-          path: flash_files/
+          name: esp32s3-box-factory-demo
+          path: |
+            examples/factory_demo/build/bootloader/bootloader.bin
+            examples/factory_demo/build/partition_table/partition-table.bin
+            examples/factory_demo/build/ota_data_initial.bin
+            examples/factory_demo/build/factory_demo.bin
+            examples/factory_demo/build/storage.bin
+            examples/factory_demo/build/srmodels/srmodels.bin
