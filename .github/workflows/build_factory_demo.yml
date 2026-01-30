@@ -1,8 +1,6 @@
-name: ESP32-S3-BOX Factory Demo Build
+name: Build ESP32-S3-BOX Factory Demo
 
 on:
-  push:
-  pull_request:
   workflow_dispatch:
 
 jobs:
@@ -10,81 +8,50 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      # 1. Checkout repository
+      - uses: actions/checkout@v3
+        with:
+          submodules: recursive
+          fetch-depth: 0
 
-      # -------------------------
-      # Install system dependencies
-      # -------------------------
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            git cmake ninja-build \
-            python3 python3-pip python3-venv \
-            libusb-1.0-0
+      # 2. Setup Python
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
 
-      # -------------------------
-      # Clone ESP-IDF
-      # -------------------------
-      - name: Clone ESP-IDF
-        run: |
-          git clone --recursive https://github.com/espressif/esp-idf.git
+      # 3. Install ESP-IDF v5.3
+      - run: |
+          git clone --branch v5.3 --depth 1 https://github.com/espressif/esp-idf.git
           cd esp-idf
-          git checkout v5.1
-          git submodule update --init --recursive
+          ./install.sh
+          cd ..
 
-      # -------------------------
-      # Install ESP-IDF tools
-      # -------------------------
-      - name: Install ESP-IDF tools
-        run: |
-          cd esp-idf
-          ./install.sh esp32s3
-
-      # -------------------------
-      # Clone ESP-BOX repository
-      # -------------------------
-      - name: Clone ESP-BOX
-        run: |
-          git clone https://github.com/espressif/esp-box.git
-
-      # -------------------------
-      # Build factory_demo (ESP32-S3-BOX-3)
-      # -------------------------
-      - name: Build factory_demo (ESP32-S3-BOX-3)
-        shell: bash
-        run: |
+      # 4. Export ESP-IDF environment
+      - run: |
           source esp-idf/export.sh
 
-          cd esp-box/examples/factory_demo
+      # 5. Select SDKCONFIG for ESP32-S3-BOX-3
+      - run: |
+          cp examples/factory_demo/sdkconfig.ci.box-3 examples/factory_demo/sdkconfig
 
-          # Use official CI config for BOX-3
-          cp sdkconfig.ci.box-3 sdkconfig
-
-          idf.py set-target esp32s3
-
-          # Build everything
-          idf.py build
-
-          # Generate flasher args including extra partitions
+      # 6. Build the factory_demo example
+      - run: |
+          cd examples/factory_demo
           idf.py fullclean
-          cp sdkconfig.ci.box-3 sdkconfig
           idf.py build
-          idf.py fullsize-bin
 
-      # -------------------------
-      # Upload flashable binaries
-      # -------------------------
-      - name: Upload flashable artifacts
-        uses: actions/upload-artifact@v4
+      # 7. Copy binaries to a single folder for flash webpage
+      - run: |
+          mkdir -p flash_files
+          cp build/bootloader/bootloader.bin flash_files/
+          cp build/partition_table/partition-table.bin flash_files/
+          cp build/ota_data_initial.bin flash_files/
+          cp build/factory_demo.bin flash_files/
+          cp build/storage.bin flash_files/
+          cp build/model.bin flash_files/
+
+      # 8. Upload binaries as GitHub artifact
+      - uses: actions/upload-artifact@v3
         with:
-          name: esp32-s3-box-factory-demo-binaries
-          path: |
-            esp-box/examples/factory_demo/build/bootloader/bootloader.bin
-            esp-box/examples/factory_demo/build/partition_table/partition-table.bin
-            esp-box/examples/factory_demo/build/ota_data_initial.bin
-            esp-box/examples/factory_demo/build/factory_demo.bin
-            esp-box/examples/factory_demo/build/storage.bin
-            esp-box/examples/factory_demo/build/model.bin
-            esp-box/examples/factory_demo/build/flasher_args.json
+          name: esp32-s3-box-firmware
+          path: flash_files/
