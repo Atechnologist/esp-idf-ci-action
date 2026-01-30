@@ -1,7 +1,8 @@
-name: Build ESP32-S3-BOX Factory Demo
+name: ESP32-S3-BOX Factory Demo Build
 
 on:
   push:
+  pull_request:
   workflow_dispatch:
 
 jobs:
@@ -9,44 +10,81 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # 1️⃣ Checkout ESP-BOX repository
-      - name: Checkout esp-box
+      - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          repository: espressif/esp-box
-          submodules: recursive
 
-      # 2️⃣ Build factory_demo for ESP32-S3-BOX (NOT BOX-3)
-      - name: Build factory_demo (ESP32-S3-BOX)
-        uses: espressif/esp-idf-ci-action@v1
-        with:
-          esp_idf_version: v5.3
-          target: esp32s3
-          path: examples/factory_demo
-          command: |
-            echo "Selecting ESP32-S3-BOX board config"
-            cp sdkconfig.ci.box sdkconfig
+      # -------------------------
+      # Install system dependencies
+      # -------------------------
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            git cmake ninja-build \
+            python3 python3-pip python3-venv \
+            libusb-1.0-0
 
-            # Safety: ensure BOX-3 is disabled
-            echo "CONFIG_ESP_BOX_BOARD_S3_BOX=y" >> sdkconfig
-            echo "CONFIG_ESP_BOX_BOARD_S3_BOX_3=n" >> sdkconfig
+      # -------------------------
+      # Clone ESP-IDF
+      # -------------------------
+      - name: Clone ESP-IDF
+        run: |
+          git clone --recursive https://github.com/espressif/esp-idf.git
+          cd esp-idf
+          git checkout v5.1
+          git submodule update --init --recursive
 
-            # Flash compatibility for early S3 (v0.1)
-            echo "CONFIG_ESPTOOLPY_FLASHMODE_DIO=y" >> sdkconfig
-            echo "CONFIG_ESPTOOLPY_FLASHMODE_OPI=n" >> sdkconfig
+      # -------------------------
+      # Install ESP-IDF tools
+      # -------------------------
+      - name: Install ESP-IDF tools
+        run: |
+          cd esp-idf
+          ./install.sh esp32s3
 
-            idf.py set-target esp32s3
-            idf.py build
+      # -------------------------
+      # Clone ESP-BOX repository
+      # -------------------------
+      - name: Clone ESP-BOX
+        run: |
+          git clone https://github.com/espressif/esp-box.git
 
-      # 3️⃣ Upload firmware binaries
-      - name: Upload firmware artifacts
+      # -------------------------
+      # Build factory_demo (ESP32-S3-BOX-3)
+      # -------------------------
+      - name: Build factory_demo (ESP32-S3-BOX-3)
+        shell: bash
+        run: |
+          source esp-idf/export.sh
+
+          cd esp-box/examples/factory_demo
+
+          # Use official CI config for BOX-3
+          cp sdkconfig.ci.box-3 sdkconfig
+
+          idf.py set-target esp32s3
+
+          # Build everything
+          idf.py build
+
+          # Generate flasher args including extra partitions
+          idf.py fullclean
+          cp sdkconfig.ci.box-3 sdkconfig
+          idf.py build
+          idf.py fullsize-bin
+
+      # -------------------------
+      # Upload flashable binaries
+      # -------------------------
+      - name: Upload flashable artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: esp32-s3-box-factory-demo
+          name: esp32-s3-box-factory-demo-binaries
           path: |
-            examples/factory_demo/build/bootloader/bootloader.bin
-            examples/factory_demo/build/partition_table/partition-table.bin
-            examples/factory_demo/build/ota_data_initial.bin
-            examples/factory_demo/build/factory_demo.bin
-            examples/factory_demo/build/storage.bin
-            examples/factory_demo/build/model.bin
+            esp-box/examples/factory_demo/build/bootloader/bootloader.bin
+            esp-box/examples/factory_demo/build/partition_table/partition-table.bin
+            esp-box/examples/factory_demo/build/ota_data_initial.bin
+            esp-box/examples/factory_demo/build/factory_demo.bin
+            esp-box/examples/factory_demo/build/storage.bin
+            esp-box/examples/factory_demo/build/model.bin
+            esp-box/examples/factory_demo/build/flasher_args.json
