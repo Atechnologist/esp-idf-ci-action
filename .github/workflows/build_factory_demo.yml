@@ -29,9 +29,10 @@ jobs:
     - name: Build official ESP32-S3-BOX example
       run: |
         source esp-idf/export.sh
-        cd esp-idf/examples/boards/esp32_s3_box
+        cd esp-idf/examples/esp32_s3_box
         idf.py set-target esp32s3
         idf.py build
+
 
     - name: Upload firmware
       uses: actions/upload-artifact@v4
