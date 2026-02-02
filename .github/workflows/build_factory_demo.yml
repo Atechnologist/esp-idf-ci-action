@@ -1,4 +1,4 @@
-name: Build ESP32-S3-BOX Factory Demo
+name: Build ESP32-S3-BOX Factory Demo (Stable)
 
 on:
   push:
@@ -11,24 +11,17 @@ jobs:
 
     steps:
     # ------------------------------------------------------------
-    # 1. Checkout WITHOUT recursive submodules
+    # 1️⃣ Checkout ESP-BOX repository (NO recursive submodules)
     # ------------------------------------------------------------
-    - name: Checkout repository
+    - name: Checkout esp-box
       uses: actions/checkout@v4
       with:
-        fetch-depth: 0
+        repository: espressif/esp-box
+        fetch-depth: 1
         submodules: false
 
     # ------------------------------------------------------------
-    # 2. Remove broken OpenThread submodule reference
-    # ------------------------------------------------------------
-    - name: Remove OpenThread submodule
-      run: |
-        rm -rf components/openthread || true
-        git config --file .gitmodules --remove-section submodule.components/openthread/openthread || true
-
-    # ------------------------------------------------------------
-    # 3. Setup Python
+    # 2️⃣ Setup Python
     # ------------------------------------------------------------
     - name: Set up Python
       uses: actions/setup-python@v5
@@ -36,7 +29,7 @@ jobs:
         python-version: "3.11"
 
     # ------------------------------------------------------------
-    # 4. Install ESP-IDF v5.3 (unchanged)
+    # 3️⃣ Install ESP-IDF v5.3 (stable)
     # ------------------------------------------------------------
     - name: Install ESP-IDF
       run: |
@@ -47,43 +40,33 @@ jobs:
         source ./export.sh
 
     # ------------------------------------------------------------
-    # 5. Fetch ESP-BOX factory_demo
+    # 4️⃣ Select ESP32-S3-BOX (ORIGINAL) config
     # ------------------------------------------------------------
-    - name: Clone ESP-BOX repo
+    - name: Apply ESP32-S3-BOX SDKConfig
       run: |
-        git clone https://github.com/espressif/esp-box.git
-        cd esp-box
-        git checkout master
+        cd examples/factory_demo
+        cp sdkconfig.ci.box sdkconfig
 
     # ------------------------------------------------------------
-    # 6. Select ESP32-S3-BOX-3 config (ONLY CHANGE HERE)
-    # ------------------------------------------------------------
-    - name: Apply ESP32-S3-BOX-3 SDKConfig
-      run: |
-        cd esp-box/examples/factory_demo
-        cp sdkconfig.ci.box-3 sdkconfig
-        echo "CONFIG_OPENTHREAD_ENABLED=n" >> sdkconfig
-
-    # ------------------------------------------------------------
-    # 7. Build firmware
+    # 5️⃣ Build factory_demo
     # ------------------------------------------------------------
     - name: Build Factory Demo
       run: |
         source $HOME/esp-idf/export.sh
-        cd esp-box/examples/factory_demo
+        cd examples/factory_demo
         idf.py set-target esp32s3
         idf.py build
 
     # ------------------------------------------------------------
-    # 8. Upload binaries
+    # 6️⃣ Upload binaries (ESP Launchpad compatible)
     # ------------------------------------------------------------
     - name: Upload firmware artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: esp32-s3-box-3-factory-demo
+        name: esp32-s3-box-factory-demo
         path: |
-          esp-box/examples/factory_demo/build/bootloader/bootloader.bin
-          esp-box/examples/factory_demo/build/partition_table/partition-table.bin
-          esp-box/examples/factory_demo/build/ota_data_initial.bin
-          esp-box/examples/factory_demo/build/factory_demo.bin
-          esp-box/examples/factory_demo/build/storage.bin
+          examples/factory_demo/build/bootloader/bootloader.bin
+          examples/factory_demo/build/partition_table/partition-table.bin
+          examples/factory_demo/build/ota_data_initial.bin
+          examples/factory_demo/build/factory_demo.bin
+          examples/factory_demo/build/storage.bin
