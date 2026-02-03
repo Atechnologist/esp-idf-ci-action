@@ -1,82 +1,86 @@
-name: Build ESP32-S3-BOX Factory Demo
+name: Build ESP32-S3-BOX Factory Demo (Touch)
 
 on:
   push:
-    branches: [main]
+    branches: [ main ]
   workflow_dispatch:
-    inputs:
-      board:
-        description: 'Select board type (box-1 or box-3)'
-        required: true
-        default: 'box-1'
 
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
+    # ------------------------------------------------------------
+    # 1. Checkout (NO submodules)
+    # ------------------------------------------------------------
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        submodules: false
 
-      # 1️⃣ Checkout ESP-BOX repository
-      - name: Checkout ESP-BOX
-        uses: actions/checkout@v4
-        with:
-          repository: 'espressif/esp-box'
-          submodules: recursive
+    # ------------------------------------------------------------
+    # 2. Setup Python
+    # ------------------------------------------------------------
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.11"
 
-      # 2️⃣ Set up Python for ESP-IDF
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
+    # ------------------------------------------------------------
+    # 3. Install ESP-IDF v5.3 (ESP32-S3)
+    # ------------------------------------------------------------
+    - name: Install ESP-IDF
+      run: |
+        python -m pip install --upgrade pip
+        git clone --depth 1 -b release/v5.3 https://github.com/espressif/esp-idf.git $HOME/esp-idf
+        cd $HOME/esp-idf
+        ./install.sh esp32s3
 
-      # 3️⃣ Install ESP-IDF v5.3
-      - name: Install ESP-IDF
-        run: |
-          python -m pip install --upgrade pip
-          git clone --depth 1 -b release/v5.3 https://github.com/espressif/esp-idf.git $HOME/esp-idf
-          cd $HOME/esp-idf
-          ./install.sh esp32s3
-          source ./export.sh
+    # ------------------------------------------------------------
+    # 4. Clone ESP-BOX repository (CORRECT BSP WITH TOUCH)
+    # ------------------------------------------------------------
+    - name: Clone ESP-BOX
+      run: |
+        git clone https://github.com/espressif/esp-box.git
+        cd esp-box
+        git checkout master
 
-      # 4️⃣ Select SDKConfig based on board
-      - name: Apply Board-Specific SDKConfig
-        run: |
-          cd esp-box/examples/factory_demo
-          if [ "${{ github.event.inputs.board }}" = "box-3" ]; then
-              echo "Building for ESP32-S3-BOX-3 (no touch)"
-              cp sdkconfig.ci.box-3 sdkconfig
-              # Disable touch for CI build
-              echo "CONFIG_BSP_TOUCH_ENABLED=n" >> sdkconfig
-          else
-              echo "Building for original ESP32-S3-BOX (touch enabled)"
-              cp sdkconfig.ci.box sdkconfig
-          fi
+    # ------------------------------------------------------------
+    # 5. Configure for ESP32-S3-BOX (Touch)
+    # ------------------------------------------------------------
+    - name: Apply SDKConfig for ESP32-S3-BOX
+      run: |
+        source $HOME/esp-idf/export.sh
+        cd esp-box/examples/factory_demo
 
-      # 5️⃣ Build factory_demo
-      - name: Build Factory Demo
-        run: |
-          source $HOME/esp-idf/export.sh
-          cd esp-box/examples/factory_demo
-          idf.py set-target esp32s3
-          idf.py build
+        # Correct config for BOX v1.0 (touch)
+        cp sdkconfig.ci.box sdkconfig
 
-      # 6️⃣ Generate model.bin (Voice AI) and storage.bin (UI)
-      - name: Generate Model & Storage Binaries
-        run: |
-          cd esp-box/examples/factory_demo
-          SR_PATH=$(find ./managed_components -name "movemodel.py" | head -n 1)
-          python "$SR_PATH" -d1 sdkconfig -d2 "$(dirname "$SR_PATH")" -d3 build
-          cp build/srmodels/srmodels.bin build/model.bin || echo "Model copy failed"
-          python $IDF_PATH/components/esptool_py/esptool/esptool.py --chip esp32s3 merge_bin -o build/storage.bin @build/flash_storage_args || echo "Storage merge failed"
+        # Explicit safety (optional but fine)
+        echo "CONFIG_LVGL_TOUCH_CONTROLLER_ENABLED=y" >> sdkconfig
 
-      # 7️⃣ Upload binaries for flashing
-      - name: Upload Firmware Binaries
-        uses: actions/upload-artifact@v4
-        with:
-          name: esp32-s3-box-factory-demo
-          path: |
-            esp-box/examples/factory_demo/build/bootloader/bootloader.bin
-            esp-box/examples/factory_demo/build/partition_table/partition-table.bin
-            esp-box/examples/factory_demo/build/ota_data_initial.bin
-            esp-box/examples/factory_demo/build/factory_demo.bin
-            esp-box/examples/factory_demo/build/storage.bin
-            esp-box/examples/factory_demo/build/model.bin
+    # ------------------------------------------------------------
+    # 6. Build firmware
+    # ------------------------------------------------------------
+    - name: Build Factory Demo
+      run: |
+        source $HOME/esp-idf/export.sh
+        cd esp-box/examples/factory_demo
+        idf.py set-target esp32s3
+        idf.py build
+
+    # ------------------------------------------------------------
+    # 7. Upload binaries (ESP Web Flasher compatible)
+    # ------------------------------------------------------------
+    - name: Upload firmware artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: esp32-s3-box-factory-demo-touch
+        path: |
+          esp-box/examples/factory_demo/build/bootloader/bootloader.bin
+          esp-box/examples/factory_demo/build/partition_table/partition-table.bin
+          esp-box/examples/factory_demo/build/ota_data_initial.bin
+          esp-box/examples/factory_demo/build/factory_demo.bin
+          esp-box/examples/factory_demo/build/storage.bin
+          esp-box/examples/factory_demo/build/model.bin
