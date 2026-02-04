@@ -5,43 +5,48 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout esp-box repository
+      - name: Checkout esp-box
         uses: actions/checkout@v4
         with:
           repository: 'espressif/esp-box'
           submodules: 'recursive'
 
-      - name: Build and Generate Compatible Binaries
+      - name: Build and Generate Binaries
         uses: espressif/esp-idf-ci-action@v1
         with:
           esp_idf_version: v5.3
           target: esp32s3
           path: 'examples/factory_demo'
           command: |
-            # 1. Clean out the BOX-3 defaults that cause the crash
-            rm -f sdkconfig.defaults.s3_box_3 sdkconfig
+            # 1. ENTER THE EXAMPLE FOLDER (Crucial for the 'image' folder to be found)
+            cd examples/factory_demo
             
-            # 2. Force Original Board Profile and DIO Flash Mode
-            # Overwriting the main defaults file is the most reliable way
-            echo "CONFIG_ESP_BOX_BOARD_S3_BOX=y" > sdkconfig.defaults
+            # 2. Force Original Board + DIO mode
+            rm -f sdkconfig.defaults.s3_box_3 sdkconfig
+            echo "CONFIG_ESP_BOX_BOARD_S3_BOX=y" >> sdkconfig.defaults
             echo "CONFIG_ESP_BOX_BOARD_S3_BOX_3=n" >> sdkconfig.defaults
             echo "CONFIG_ESPTOOLPY_FLASHMODE_DIO=y" >> sdkconfig.defaults
             echo "CONFIG_ESPTOOLPY_FLASHMODE_OPI=n" >> sdkconfig.defaults
             
-            # 3. Standard Build (Using the working logic from before)
+            # 3. Build project
             idf.py build
             
-            # 4. Generate Storage binary (UI Graphics)
-            # Use the absolute path to spiffsgen inside the container
-            python /opt/esp/idf/components/spiffs/spiffsgen.py 0x28a000 image build/storage.bin
+            # 4. Generate model binary
+            SR_PATH=$(find ../../managed_components -name "movemodel.py" | head -n 1)
+            python "$SR_PATH" -d1 sdkconfig -d2 "$(dirname "$SR_PATH")" -d3 build
+            cp build/srmodels/srmodels.bin build/model.bin || echo "Model failed"
+            
+            # 5. Generate storage binary
+            python $IDF_PATH/components/spiffs/spiffsgen.py 0x28a000 image build/storage.bin
 
       - name: Upload Binaries
         uses: actions/upload-artifact@v4
         with:
-          name: esp-box-v01-final-firmware
+          name: esp-box-v0.1-bundle
           path: |
             examples/factory_demo/build/bootloader/bootloader.bin
             examples/factory_demo/build/partition_table/partition-table.bin
             examples/factory_demo/build/ota_data_initial.bin
             examples/factory_demo/build/factory_demo.bin
             examples/factory_demo/build/storage.bin
+            examples/factory_demo/build/model.bin
