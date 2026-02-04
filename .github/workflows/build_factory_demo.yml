@@ -1,74 +1,59 @@
-name: Build ESP32-S3-BOX Factory Demo (Touch Fix)
-
-on:
-  push:
-    branches: [ main ]
-  workflow_dispatch:
+name: Build ESP-BOX Original Final 2026
+on: [push, workflow_dispatch]
 
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
+      - name: Checkout esp-box repository
+        uses: actions/checkout@v4
+        with:
+          repository: 'espressif/esp-box'
+          submodules: 'recursive'
 
-    - name: Set up Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: "3.11"
+      - name: Build and Generate Binaries
+        uses: espressif/esp-idf-ci-action@v1
+        with:
+          esp_idf_version: v5.3
+          target: esp32s3
+          path: 'examples/factory_demo'
+          command: |
+            # 1. REMOVE BOX-3 COMPONENTS (Stops the crash)
+            rm -rf ../../managed_components/espressif__esp-box-3
+            rm -f sdkconfig.defaults.s3_box_3
 
-    - name: Install ESP-IDF v5.3
-      run: |
-        git clone --depth 1 -b release/v5.3 https://github.com $HOME/esp-idf
-        cd $HOME/esp-idf
-        ./install.sh esp32s3
+            # 2. CREATE CUSTOM PARTITION TABLE (Matches your hardware logs)
+            cat <<EOF > partitions.csv
+            # Name, Type, SubType, Offset, Size, Flags
+            nvs,      data, nvs,     ,        0x6000,
+            otadata,  data, ota,     ,        0x2000,
+            phy_init, data, phy,     ,        0x1000,
+            factory,  app,  factory, 0x20000, 0x400000,
+            storage,  data, spiffs,  0x43a000,0x28a000,
+            model,    data, spiffs,  0x6c4000,0x866000,
+            EOF
 
-    - name: Clone ESP-BOX
-      run: |
-        git clone --recursive https://github.com
-        cd esp-box
-        git checkout master
+            # 3. FORCE ORIGINAL BOX CONFIG & CUSTOM PARTITIONS
+            echo "CONFIG_ESP_BOX_BOARD_S3_BOX=y" > sdkconfig.defaults
+            echo "CONFIG_ESP_BOX_BOARD_S3_BOX_3=n" >> sdkconfig.defaults
+            echo "CONFIG_PARTITION_TABLE_CUSTOM=y" >> sdkconfig.defaults
+            echo "CONFIG_PARTITION_TABLE_CUSTOM_FILENAME=\"partitions.csv\"" >> sdkconfig.defaults
+            echo "CONFIG_ESPTOOLPY_FLASHMODE_DIO=y" >> sdkconfig.defaults
+            echo "CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y" >> sdkconfig.defaults
+            
+            # 4. Build Project
+            idf.py build
+            
+            # 5. Generate Storage binary (UI Graphics)
+            python /opt/esp/idf/components/spiffs/spiffsgen.py 0x28a000 image build/storage.bin
 
-    - name: Force Original Hardware Profile
-      run: |
-        source $HOME/esp-idf/export.sh
-        cd esp-box/examples/factory_demo
-
-        # 1. DELETE BOX-3 COMPONENTS (This is the only way to stop it from being detected)
-        rm -rf ../../managed_components/espressif__esp-box-3
-        rm -f sdkconfig.defaults.s3_box_3
-
-        # 2. Force Original BOX Config
-        cat <<EOF > sdkconfig.defaults
-        CONFIG_ESP_BOX_BOARD_S3_BOX=y
-        CONFIG_ESP_BOX_BOARD_S3_BOX_3=n
-        CONFIG_ESPTOOLPY_FLASHMODE_DIO=y
-        CONFIG_ESPTOOLPY_FLASHFREQ_80M=y
-        CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y
-        EOF
-
-    - name: Build Firmware
-      run: |
-        source $HOME/esp-idf/export.sh
-        cd esp-box/examples/factory_demo
-        
-        # 3. Explicitly set the Board Version for the BSP
-        export ESP_BOX_BOARD=S3_BOX
-        
-        idf.py set-target esp32s3
-        idf.py build
-        
-        # 4. Generate Storage Binary
-        python $HOME/esp-idf/components/spiffs/spiffsgen.py 0x28a000 image build/storage.bin
-
-    - name: Upload Binaries
-      uses: actions/upload-artifact@v4
-      with:
-        name: esp-box-v01-touch-fixed
-        path: |
-          esp-box/examples/factory_demo/build/bootloader/bootloader.bin
-          esp-box/examples/factory_demo/build/partition_table/partition-table.bin
-          esp-box/examples/factory_demo/build/ota_data_initial.bin
-          esp-box/examples/factory_demo/build/factory_demo.bin
-          esp-box/examples/factory_demo/build/storage.bin
+      - name: Upload Binaries
+        uses: actions/upload-artifact@v4
+        with:
+          name: esp-box-v0.1-final-firmware
+          path: |
+            examples/factory_demo/build/bootloader/bootloader.bin
+            examples/factory_demo/build/partition_table/partition-table.bin
+            examples/factory_demo/build/ota_data_initial.bin
+            examples/factory_demo/build/factory_demo.bin
+            examples/factory_demo/build/storage.bin
