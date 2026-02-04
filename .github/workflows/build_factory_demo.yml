@@ -5,7 +5,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout esp-box
+      - name: Checkout esp-box repository
         uses: actions/checkout@v4
         with:
           repository: 'espressif/esp-box'
@@ -18,24 +18,33 @@ jobs:
           target: esp32s3
           path: 'examples/factory_demo'
           command: |
-            # 1. Setup Compatibility
+            # 1. Setup Board Compatibility (Fixes Screen/Touch crash)
             rm -f sdkconfig.defaults.s3_box_3 sdkconfig
             echo "CONFIG_ESP_BOX_BOARD_S3_BOX=y" >> sdkconfig.defaults
             echo "CONFIG_ESP_BOX_BOARD_S3_BOX_3=n" >> sdkconfig.defaults
             echo "CONFIG_ESPTOOLPY_FLASHMODE_DIO=y" >> sdkconfig.defaults
             echo "CONFIG_ESPTOOLPY_FLASHMODE_OPI=n" >> sdkconfig.defaults
             
-            # 2. Build Project
+            # 2. Build the project
             idf.py build
             
-            # 3. LOCATE IMAGE FOLDER (Absolute Path Fix)
+            # 3. Dynamic Path Discovery for Storage (Fixes "image not found")
             IMAGE_DIR=$(find /app -name "image" -type d | grep "factory_demo/image" | head -n 1)
-            echo "Found image directory at: $IMAGE_DIR"
-            
-            # 4. Generate Storage binary (UI Graphics)
             python /opt/esp/idf/components/spiffs/spiffsgen.py 0x28a000 "$IMAGE_DIR" build/storage.bin
             
-            # 5. Generate Model binary (Voice AI)
+            # 4. Dynamic Path Discovery for Models (Fixes "model not found")
             SR_PATH=$(find /app -name "movemodel.py" | head -n 1)
             python "$SR_PATH" -d1 sdkconfig -d2 "$(dirname "$SR_PATH")" -d3 build
-            cp build/srmodels/srmodels.bin build/model.bin || echo "Model failed"
+            cp build/srmodels/srmodels.bin build/model.bin || echo "Model copy failed"
+
+      - name: Upload Binaries
+        uses: actions/upload-artifact@v4
+        with:
+          name: esp-box-v01-complete-bundle
+          path: |
+            examples/factory_demo/build/bootloader/bootloader.bin
+            examples/factory_demo/build/partition_table/partition-table.bin
+            examples/factory_demo/build/ota_data_initial.bin
+            examples/factory_demo/build/factory_demo.bin
+            examples/factory_demo/build/storage.bin
+            examples/factory_demo/build/model.bin
