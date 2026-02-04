@@ -18,13 +18,15 @@ jobs:
           target: esp32s3
           path: 'examples/factory_demo'
           command: |
-            # 1. REMOVE BOX-3 COMPONENTS (Stops the crash)
+            # 1. ENTER THE PROJECT DIRECTORY
+            cd examples/factory_demo
+            
+            # 2. FORCE ORIGINAL BOARD CONFIG & CLEAN OLD DEFAULTS
             rm -rf ../../managed_components/espressif__esp-box-3
-            rm -f sdkconfig.defaults.s3_box_3
-
-            # 2. CREATE CUSTOM PARTITION TABLE (Matches your hardware logs)
+            rm -f sdkconfig.defaults.s3_box_3 sdkconfig
+            
+            # 3. CREATE CUSTOM PARTITION TABLE
             cat <<EOF > partitions.csv
-            # Name, Type, SubType, Offset, Size, Flags
             nvs,      data, nvs,     ,        0x6000,
             otadata,  data, ota,     ,        0x2000,
             phy_init, data, phy,     ,        0x1000,
@@ -33,7 +35,7 @@ jobs:
             model,    data, spiffs,  0x6c4000,0x866000,
             EOF
 
-            # 3. FORCE ORIGINAL BOX CONFIG & CUSTOM PARTITIONS
+            # 4. SET SDKCONFIG DEFAULTS
             echo "CONFIG_ESP_BOX_BOARD_S3_BOX=y" > sdkconfig.defaults
             echo "CONFIG_ESP_BOX_BOARD_S3_BOX_3=n" >> sdkconfig.defaults
             echo "CONFIG_PARTITION_TABLE_CUSTOM=y" >> sdkconfig.defaults
@@ -41,10 +43,10 @@ jobs:
             echo "CONFIG_ESPTOOLPY_FLASHMODE_DIO=y" >> sdkconfig.defaults
             echo "CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y" >> sdkconfig.defaults
             
-            # 4. Build Project
+            # 5. BUILD PROJECT
             idf.py build
             
-            # 5. Generate Storage binary (UI Graphics)
+            # 6. GENERATE STORAGE BINARY (NOW THAT WE ARE IN THE CORRECT DIR)
             python /opt/esp/idf/components/spiffs/spiffsgen.py 0x28a000 image build/storage.bin
 
       - name: Upload Binaries
