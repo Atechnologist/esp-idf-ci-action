@@ -18,24 +18,29 @@ jobs:
           target: esp32s3
           path: 'examples/factory_demo'
           command: |
-            # 1. Setup Board Compatibility (Fixes Screen/Touch crash)
+            # 1. Force Hardware Compatibility (Fixes Screen/Touch crash)
             rm -f sdkconfig.defaults.s3_box_3 sdkconfig
             echo "CONFIG_ESP_BOX_BOARD_S3_BOX=y" >> sdkconfig.defaults
             echo "CONFIG_ESP_BOX_BOARD_S3_BOX_3=n" >> sdkconfig.defaults
             echo "CONFIG_ESPTOOLPY_FLASHMODE_DIO=y" >> sdkconfig.defaults
             echo "CONFIG_ESPTOOLPY_FLASHMODE_OPI=n" >> sdkconfig.defaults
             
-            # 2. Build the project
+            # 2. Build Project
             idf.py build
             
-            # 3. Dynamic Path Discovery for Storage (Fixes "image not found")
-            IMAGE_DIR=$(find /app -name "image" -type d | grep "factory_demo/image" | head -n 1)
-            python /opt/esp/idf/components/spiffs/spiffsgen.py 0x28a000 "$IMAGE_DIR" build/storage.bin
+            # 3. Create a local copy of the image folder to ensure spiffsgen sees it
+            # This bypasses the "directory does not exist" error
+            mkdir -p ./spiffs_image
+            cp -r ./image/* ./spiffs_image/
             
-            # 4. Dynamic Path Discovery for Models (Fixes "model not found")
-            SR_PATH=$(find /app -name "movemodel.py" | head -n 1)
+            # 4. Generate Storage binary (UI Graphics)
+            python /opt/esp/idf/components/spiffs/spiffsgen.py 0x28a000 ./spiffs_image build/storage.bin
+            
+            # 5. Generate Model binary (Voice AI)
+            # Find movemodel.py relative to the current project directory
+            SR_PATH=$(find ../../ -name "movemodel.py" | head -n 1)
             python "$SR_PATH" -d1 sdkconfig -d2 "$(dirname "$SR_PATH")" -d3 build
-            cp build/srmodels/srmodels.bin build/model.bin || echo "Model copy failed"
+            cp build/srmodels/srmodels.bin build/model.bin || echo "Model failed"
 
       - name: Upload Binaries
         uses: actions/upload-artifact@v4
