@@ -1,4 +1,4 @@
-name: Build ESP-BOX Original Final 2026
+name: Build ESP-BOX Original 2026
 on: [push, workflow_dispatch]
 
 jobs:
@@ -11,48 +11,34 @@ jobs:
           repository: 'espressif/esp-box'
           submodules: 'recursive'
 
-      - name: Build and Generate Binaries
+      - name: Build and Generate Compatible Binaries
         uses: espressif/esp-idf-ci-action@v1
         with:
           esp_idf_version: v5.3
           target: esp32s3
           path: 'examples/factory_demo'
           command: |
-            # 1. ENTER THE PROJECT DIRECTORY
-            cd examples/factory_demo
-            
-            # 2. FORCE ORIGINAL BOARD CONFIG & CLEAN OLD DEFAULTS
-            rm -rf ../../managed_components/espressif__esp-box-3
+            # 1. Clean out the BOX-3 defaults that cause the crash
             rm -f sdkconfig.defaults.s3_box_3 sdkconfig
             
-            # 3. CREATE CUSTOM PARTITION TABLE
-            cat <<EOF > partitions.csv
-            nvs,      data, nvs,     ,        0x6000,
-            otadata,  data, ota,     ,        0x2000,
-            phy_init, data, phy,     ,        0x1000,
-            factory,  app,  factory, 0x20000, 0x400000,
-            storage,  data, spiffs,  0x43a000,0x28a000,
-            model,    data, spiffs,  0x6c4000,0x866000,
-            EOF
-
-            # 4. SET SDKCONFIG DEFAULTS
+            # 2. Force Original Board Profile and DIO Flash Mode
+            # Overwriting the main defaults file is the most reliable way
             echo "CONFIG_ESP_BOX_BOARD_S3_BOX=y" > sdkconfig.defaults
             echo "CONFIG_ESP_BOX_BOARD_S3_BOX_3=n" >> sdkconfig.defaults
-            echo "CONFIG_PARTITION_TABLE_CUSTOM=y" >> sdkconfig.defaults
-            echo "CONFIG_PARTITION_TABLE_CUSTOM_FILENAME=\"partitions.csv\"" >> sdkconfig.defaults
             echo "CONFIG_ESPTOOLPY_FLASHMODE_DIO=y" >> sdkconfig.defaults
-            echo "CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y" >> sdkconfig.defaults
+            echo "CONFIG_ESPTOOLPY_FLASHMODE_OPI=n" >> sdkconfig.defaults
             
-            # 5. BUILD PROJECT
+            # 3. Standard Build (Using the working logic from before)
             idf.py build
             
-            # 6. GENERATE STORAGE BINARY (NOW THAT WE ARE IN THE CORRECT DIR)
+            # 4. Generate Storage binary (UI Graphics)
+            # Use the absolute path to spiffsgen inside the container
             python /opt/esp/idf/components/spiffs/spiffsgen.py 0x28a000 image build/storage.bin
 
       - name: Upload Binaries
         uses: actions/upload-artifact@v4
         with:
-          name: esp-box-v0.1-final-firmware
+          name: esp-box-v01-final-firmware
           path: |
             examples/factory_demo/build/bootloader/bootloader.bin
             examples/factory_demo/build/partition_table/partition-table.bin
