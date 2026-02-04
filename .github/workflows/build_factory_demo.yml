@@ -18,25 +18,24 @@ jobs:
           target: esp32s3
           path: 'examples/factory_demo'
           command: |
-            # 1. ENTER THE EXAMPLE FOLDER (Crucial for the 'image' folder to be found)
-            cd examples/factory_demo
-            
-            # 2. Force Original Board + DIO mode
+            # 1. Clean and Setup Board Config
             rm -f sdkconfig.defaults.s3_box_3 sdkconfig
             echo "CONFIG_ESP_BOX_BOARD_S3_BOX=y" >> sdkconfig.defaults
             echo "CONFIG_ESP_BOX_BOARD_S3_BOX_3=n" >> sdkconfig.defaults
             echo "CONFIG_ESPTOOLPY_FLASHMODE_DIO=y" >> sdkconfig.defaults
             echo "CONFIG_ESPTOOLPY_FLASHMODE_OPI=n" >> sdkconfig.defaults
             
-            # 3. Build project
+            # 2. Run the build (The action is already in examples/factory_demo)
             idf.py build
             
-            # 4. Generate model binary
-            SR_PATH=$(find ../../managed_components -name "movemodel.py" | head -n 1)
+            # 3. Generate Model binary (Voice AI)
+            # Components are downloaded into the project's 'managed_components' folder
+            SR_PATH=$(find ./managed_components -name "movemodel.py" | head -n 1)
             python "$SR_PATH" -d1 sdkconfig -d2 "$(dirname "$SR_PATH")" -d3 build
             cp build/srmodels/srmodels.bin build/model.bin || echo "Model failed"
             
-            # 5. Generate storage binary
+            # 4. Generate Storage binary (UI Graphics)
+            # Use the local 'image' folder which is now in the current directory
             python $IDF_PATH/components/spiffs/spiffsgen.py 0x28a000 image build/storage.bin
 
       - name: Upload Binaries
