@@ -1,4 +1,4 @@
-name: Build ESP32-S3 Hybrid Firmware
+name: Build Minimal ESP32-S3 Hybrid
 
 on:
   push:
@@ -15,7 +15,7 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Set up ESP-IDF
+      - name: Build firmware
         uses: espressif/esp-idf-ci-action@v1
         with:
           esp_idf_version: v5.1.2
@@ -23,12 +23,12 @@ jobs:
           path: .
           command: |
             idf.py set-target esp32s3
-            idf.py -DSDKCONFIG_DEFAULTS="sdkconfig.ci.box-3" build
+            idf.py build
 
-      - name: Upload firmware artifacts
+      - name: Upload firmware
         uses: actions/upload-artifact@v4
         with:
-          name: esp32-s3-hybrid-firmware
+          name: esp32-s3-minimal-hybrid
           path: |
             build/bootloader/bootloader.bin
             build/partition_table/partition-table.bin
