@@ -1,4 +1,4 @@
-name: Build ESP-BOX Original 2026
+name: Build ESP-BOX S3-BOX-3 with HA MQTT
 
 on:
   push:
@@ -9,56 +9,83 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # ------------------------------------------------------------
+      # 1. Checkout ESP-BOX repository (recursive submodules)
+      # ------------------------------------------------------------
       - name: Checkout esp-box repository
         uses: actions/checkout@v4
         with:
-          repository: espressif/esp-box
+          repository: 'espressif/esp-box'
           submodules: recursive
-          fetch-depth: 0
 
+      # ------------------------------------------------------------
+      # 2. Build and Generate Binaries
+      # ------------------------------------------------------------
       - name: Build and Generate Binaries
         uses: espressif/esp-idf-ci-action@v1
         with:
           esp_idf_version: v5.3
           target: esp32s3
-          path: .
+          path: 'examples/factory_demo'
           command: |
             set -e
 
-            cd examples/factory_demo
-
-            mkdir -p image
-            touch image/.keep
-            
+            # --------------------------------------------------
+            # Force ESP32-S3-BOX-3 Hardware
+            # --------------------------------------------------
             rm -f sdkconfig sdkconfig.defaults
             cp sdkconfig.ci.box sdkconfig.defaults
-            
+
             echo "CONFIG_ESP_BOX_BOARD_S3_BOX=y" >> sdkconfig.defaults
-            echo "CONFIG_ESP_BOX_BOARD_S3_BOX_3=n" >> sdkconfig.defaults
+            echo "CONFIG_ESP_BOX_BOARD_S3_BOX_3=y" >> sdkconfig.defaults
             echo "CONFIG_BSP_TOUCH_ENABLED=y" >> sdkconfig.defaults
             echo "CONFIG_ESPTOOLPY_FLASHMODE_DIO=y" >> sdkconfig.defaults
             echo "CONFIG_ESPTOOLPY_FLASHMODE_OPI=n" >> sdkconfig.defaults
-            echo "CONFIG_SPIFFS_GENERATE_IMAGE=n" >> sdkconfig.defaults   # ← disable auto SPIFFS
-            
+
+            # --------------------------------------------------
+            # Add Home Assistant MQTT Defaults
+            # --------------------------------------------------
+            echo "CONFIG_MQTT_ENABLE=y" >> sdkconfig.defaults
+            echo "CONFIG_MQTT_BROKER_URL=\"mqtt://homeassistant.local\"" >> sdkconfig.defaults
+            echo "CONFIG_MQTT_USERNAME=\"esphome\"" >> sdkconfig.defaults
+            echo "CONFIG_MQTT_PASSWORD=\"your_password_here\"" >> sdkconfig.defaults
+            echo "CONFIG_MQTT_CLIENT_ID=\"esp-box-s3\"" >> sdkconfig.defaults
+
+            # --------------------------------------------------
+            # Build Firmware
+            # --------------------------------------------------
             idf.py set-target esp32s3
             idf.py build
-            
 
-            
+            # --------------------------------------------------
+            # Prepare SPIFFS Image
+            # --------------------------------------------------
+            mkdir -p ./spiffs_image
+            cp -r ./image/* ./spiffs_image/
 
-            SR_PATH=$(find $IDF_PATH -name movemodel.py | head -n 1)
-            python "$SR_PATH" -d1 sdkconfig -d2 "$(dirname "$SR_PATH")" -d3 build
-            cp build/srmodels/srmodels.bin build/model.bin
+            # Copy prebuilt voice model if exists
+            if [ -f ./build/model.bin ]; then
+                cp ./build/model.bin ./spiffs_image/model.bin
+            fi
 
-            python $IDF_PATH/components/esptool_py/esptool/esptool.py \
-              --chip esp32s3 merge_bin \
-              -o build/storage.bin \
-              @build/flash_storage_args
+            # Generate storage.bin
+            python /opt/esp/idf/components/spiffs/spiffsgen.py 0x28a000 ./spiffs_image build/storage.bin
 
+            # Generate model.bin if not present
+            if [ ! -f ./spiffs_image/model.bin ]; then
+                SR_PATH=$(find ../../ -name "movemodel.py" | head -n 1)
+                python "$SR_PATH" -d1 sdkconfig -d2 "$(dirname "$SR_PATH")" -d3 build
+                cp build/srmodels/srmodels.bin build/model.bin || echo "Model build skipped"
+                cp build/model.bin ./spiffs_image/model.bin || echo "Copy skipped"
+            fi
+
+      # ------------------------------------------------------------
+      # 3. Upload Firmware Artifacts
+      # ------------------------------------------------------------
       - name: Upload Binaries
         uses: actions/upload-artifact@v4
         with:
-          name: esp-box-v01-complete-bundle
+          name: esp-box-s3-ha-bundle
           path: |
             examples/factory_demo/build/bootloader/bootloader.bin
             examples/factory_demo/build/partition_table/partition-table.bin
