@@ -27,15 +27,19 @@ jobs:
 
             cd examples/factory_demo
 
+            # Ensure image directory exists for SPIFFS
+            mkdir -p image
+            touch image/.keep
+            
             rm -f sdkconfig sdkconfig.defaults
             cp sdkconfig.ci.box sdkconfig.defaults
-
+            
             echo "CONFIG_ESP_BOX_BOARD_S3_BOX=y" >> sdkconfig.defaults
             echo "CONFIG_ESP_BOX_BOARD_S3_BOX_3=n" >> sdkconfig.defaults
             echo "CONFIG_BSP_TOUCH_ENABLED=y" >> sdkconfig.defaults
             echo "CONFIG_ESPTOOLPY_FLASHMODE_DIO=y" >> sdkconfig.defaults
             echo "CONFIG_ESPTOOLPY_FLASHMODE_OPI=n" >> sdkconfig.defaults
-
+            
             idf.py set-target esp32s3
             idf.py build
 
