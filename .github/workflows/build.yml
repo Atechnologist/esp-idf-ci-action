@@ -27,7 +27,6 @@ jobs:
 
             cd examples/factory_demo
 
-            # Ensure image directory exists for SPIFFS
             mkdir -p image
             touch image/.keep
             
@@ -39,9 +38,13 @@ jobs:
             echo "CONFIG_BSP_TOUCH_ENABLED=y" >> sdkconfig.defaults
             echo "CONFIG_ESPTOOLPY_FLASHMODE_DIO=y" >> sdkconfig.defaults
             echo "CONFIG_ESPTOOLPY_FLASHMODE_OPI=n" >> sdkconfig.defaults
+            echo "CONFIG_SPIFFS_GENERATE_IMAGE=n" >> sdkconfig.defaults   # ← disable auto SPIFFS
             
             idf.py set-target esp32s3
             idf.py build
+            
+
+            
 
             SR_PATH=$(find $IDF_PATH -name movemodel.py | head -n 1)
             python "$SR_PATH" -d1 sdkconfig -d2 "$(dirname "$SR_PATH")" -d3 build
