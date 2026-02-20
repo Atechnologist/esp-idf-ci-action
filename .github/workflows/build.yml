@@ -1,8 +1,7 @@
-name: Build Minimal ESP32-S3 Hybrid
+name: Build ESP-BOX Original 2026
 
 on:
   push:
-    branches: [ main ]
   workflow_dispatch:
 
 jobs:
@@ -10,26 +9,53 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
+      - name: Checkout esp-box repository
         uses: actions/checkout@v4
         with:
+          repository: espressif/esp-box
           submodules: recursive
+          fetch-depth: 0
 
-      - name: Build firmware
+      - name: Build and Generate Binaries
         uses: espressif/esp-idf-ci-action@v1
         with:
-          esp_idf_version: v5.1.2
+          esp_idf_version: v5.3
           target: esp32s3
           path: .
           command: |
+            set -e
+
+            cd examples/factory_demo
+
+            rm -f sdkconfig sdkconfig.defaults
+            cp sdkconfig.ci.box sdkconfig.defaults
+
+            echo "CONFIG_ESP_BOX_BOARD_S3_BOX=y" >> sdkconfig.defaults
+            echo "CONFIG_ESP_BOX_BOARD_S3_BOX_3=n" >> sdkconfig.defaults
+            echo "CONFIG_BSP_TOUCH_ENABLED=y" >> sdkconfig.defaults
+            echo "CONFIG_ESPTOOLPY_FLASHMODE_DIO=y" >> sdkconfig.defaults
+            echo "CONFIG_ESPTOOLPY_FLASHMODE_OPI=n" >> sdkconfig.defaults
+
             idf.py set-target esp32s3
             idf.py build
 
-      - name: Upload firmware
+            SR_PATH=$(find $IDF_PATH -name movemodel.py | head -n 1)
+            python "$SR_PATH" -d1 sdkconfig -d2 "$(dirname "$SR_PATH")" -d3 build
+            cp build/srmodels/srmodels.bin build/model.bin
+
+            python $IDF_PATH/components/esptool_py/esptool/esptool.py \
+              --chip esp32s3 merge_bin \
+              -o build/storage.bin \
+              @build/flash_storage_args
+
+      - name: Upload Binaries
         uses: actions/upload-artifact@v4
         with:
-          name: esp32-s3-minimal-hybrid
+          name: esp-box-v01-complete-bundle
           path: |
-            build/bootloader/bootloader.bin
-            build/partition_table/partition-table.bin
-            build/*.bin
+            examples/factory_demo/build/bootloader/bootloader.bin
+            examples/factory_demo/build/partition_table/partition-table.bin
+            examples/factory_demo/build/ota_data_initial.bin
+            examples/factory_demo/build/factory_demo.bin
+            examples/factory_demo/build/storage.bin
+            examples/factory_demo/build/model.bin
