@@ -1,8 +1,5 @@
-name: Build ESP-BOX S3-BOX-3 with HA MQTT
-
-on:
-  push:
-  workflow_dispatch:
+name: Build ESP-BOX Original 2026 with HA
+on: [push, workflow_dispatch]
 
 jobs:
   build:
@@ -10,82 +7,75 @@ jobs:
 
     steps:
       # ------------------------------------------------------------
-      # 1. Checkout ESP-BOX repository (recursive submodules)
+      # 1. Checkout esp-box repository with submodules
       # ------------------------------------------------------------
-      - name: Checkout esp-box repository
+      - name: Checkout esp-box
         uses: actions/checkout@v4
         with:
           repository: 'espressif/esp-box'
-          submodules: recursive
+          submodules: 'recursive'
+          fetch-depth: 0
 
       # ------------------------------------------------------------
-      # 2. Build and Generate Binaries
+      # 2. Setup ESP-IDF
       # ------------------------------------------------------------
-      - name: Build and Generate Binaries
+      - name: Setup ESP-IDF
         uses: espressif/esp-idf-ci-action@v1
         with:
           esp_idf_version: v5.3
           target: esp32s3
-          path: 'examples/factory_demo'
-          command: |
-            set -e
-
-            # --------------------------------------------------
-            # Force ESP32-S3-BOX-3 Hardware
-            # --------------------------------------------------
-            rm -f sdkconfig sdkconfig.defaults
-            cp sdkconfig.ci.box sdkconfig.defaults
-
-            echo "CONFIG_ESP_BOX_BOARD_S3_BOX=y" >> sdkconfig.defaults
-            echo "CONFIG_ESP_BOX_BOARD_S3_BOX_3=y" >> sdkconfig.defaults
-            echo "CONFIG_BSP_TOUCH_ENABLED=y" >> sdkconfig.defaults
-            echo "CONFIG_ESPTOOLPY_FLASHMODE_DIO=y" >> sdkconfig.defaults
-            echo "CONFIG_ESPTOOLPY_FLASHMODE_OPI=n" >> sdkconfig.defaults
-
-            # --------------------------------------------------
-            # Add Home Assistant MQTT Defaults
-            # --------------------------------------------------
-            echo "CONFIG_MQTT_ENABLE=y" >> sdkconfig.defaults
-            echo "CONFIG_MQTT_BROKER_URL=\"mqtt://homeassistant.local\"" >> sdkconfig.defaults
-            echo "CONFIG_MQTT_USERNAME=\"esphome\"" >> sdkconfig.defaults
-            echo "CONFIG_MQTT_PASSWORD=\"your_password_here\"" >> sdkconfig.defaults
-            echo "CONFIG_MQTT_CLIENT_ID=\"esp-box-s3\"" >> sdkconfig.defaults
-
-            # --------------------------------------------------
-            # Build Firmware
-            # --------------------------------------------------
-            idf.py set-target esp32s3
-            idf.py build
-
-            # --------------------------------------------------
-            # Prepare SPIFFS Image
-            # --------------------------------------------------
-            mkdir -p ./spiffs_image
-            cp -r ./image/* ./spiffs_image/
-
-            # Copy prebuilt voice model if exists
-            if [ -f ./build/model.bin ]; then
-                cp ./build/model.bin ./spiffs_image/model.bin
-            fi
-
-            # Generate storage.bin
-            python /opt/esp/idf/components/spiffs/spiffsgen.py 0x28a000 ./spiffs_image build/storage.bin
-
-            # Generate model.bin if not present
-            if [ ! -f ./spiffs_image/model.bin ]; then
-                SR_PATH=$(find ../../ -name "movemodel.py" | head -n 1)
-                python "$SR_PATH" -d1 sdkconfig -d2 "$(dirname "$SR_PATH")" -d3 build
-                cp build/srmodels/srmodels.bin build/model.bin || echo "Model build skipped"
-                cp build/model.bin ./spiffs_image/model.bin || echo "Copy skipped"
-            fi
 
       # ------------------------------------------------------------
-      # 3. Upload Firmware Artifacts
+      # 3. Build firmware, SPIFFS storage, and model
+      # ------------------------------------------------------------
+      - name: Build ESP-BOX firmware
+        working-directory: examples/factory_demo
+        run: |
+          set -e
+
+          # ---------------------------------------------
+          # Force hardware compatibility for S3-BOX-3
+          # ---------------------------------------------
+          rm -f sdkconfig sdkconfig.defaults
+          cp sdkconfig.ci.box sdkconfig.defaults
+          echo "CONFIG_ESP_BOX_BOARD_S3_BOX=y" >> sdkconfig.defaults
+          echo "CONFIG_ESP_BOX_BOARD_S3_BOX_3=y" >> sdkconfig.defaults
+          echo "CONFIG_BSP_TOUCH_ENABLED=y" >> sdkconfig.defaults
+          echo "CONFIG_ESPTOOLPY_FLASHMODE_DIO=y" >> sdkconfig.defaults
+          echo "CONFIG_ESPTOOLPY_FLASHMODE_OPI=n" >> sdkconfig.defaults
+
+          # ---------------------------------------------
+          # Ensure SPIFFS image folder exists
+          # ---------------------------------------------
+          mkdir -p ./spiffs_image
+          cp -r ./image/* ./spiffs_image/ || echo "No images found, continuing"
+
+          # ---------------------------------------------
+          # Build project
+          # ---------------------------------------------
+          idf.py set-target esp32s3
+          idf.py build
+
+          # ---------------------------------------------
+          # Generate SPIFFS storage.bin
+          # Use size from partition table (0x28a000)
+          # ---------------------------------------------
+          python /opt/esp/idf/components/spiffs/spiffsgen.py 0x28a000 ./spiffs_image build/storage.bin
+
+          # ---------------------------------------------
+          # Generate model.bin (Voice AI)
+          # ---------------------------------------------
+          SR_PATH=$(find $IDF_PATH -name movemodel.py | head -n 1)
+          python "$SR_PATH" -d1 sdkconfig -d2 "$(dirname "$SR_PATH")" -d3 build
+          cp build/srmodels/srmodels.bin build/model.bin || echo "Model build failed, using prebuilt if available"
+
+      # ------------------------------------------------------------
+      # 4. Upload binaries for ESP Web Flash or OTA
       # ------------------------------------------------------------
       - name: Upload Binaries
         uses: actions/upload-artifact@v4
         with:
-          name: esp-box-s3-ha-bundle
+          name: esp-box-v01-touch-ha-bundle
           path: |
             examples/factory_demo/build/bootloader/bootloader.bin
             examples/factory_demo/build/partition_table/partition-table.bin
