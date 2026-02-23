@@ -39,14 +39,14 @@ jobs:
           target: esp32s3
           path: examples/factory_demo
           command: |
-            # Keep original config (DO NOT delete sdkconfig)
             cp sdkconfig.ci.box sdkconfig.defaults
-
-            # Only append necessary board settings
+      
+            # Force correct board
             echo "CONFIG_ESP_BOX_BOARD_S3_BOX_3=y" >> sdkconfig.defaults
-            echo "CONFIG_BSP_TOUCH_ENABLED=y" >> sdkconfig.defaults
-
-            # Set target and build
+      
+            # FORCE 16MB flash (CRITICAL FIX)
+            echo "CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y" >> sdkconfig.defaults
+      
             idf.py set-target esp32s3
             idf.py build
 
