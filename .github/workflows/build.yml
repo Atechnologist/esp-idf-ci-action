@@ -1,4 +1,4 @@
-name: Build ESP-BOX S3-BOX-3
+name: Build ESP-BOX S3-BOX-3 (Stable)
 
 on:
   push:
@@ -9,12 +9,29 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # ------------------------------------------------------------
+      # 1️⃣ Checkout official esp-box repo (FULL clone)
+      # ------------------------------------------------------------
       - name: Checkout esp-box
         uses: actions/checkout@v4
         with:
           repository: espressif/esp-box
           submodules: recursive
+          fetch-depth: 0
 
+      # ------------------------------------------------------------
+      # 2️⃣ Verify SPIFFS image folder exists
+      # ------------------------------------------------------------
+      - name: Debug factory_demo structure
+        run: |
+          echo "Listing factory_demo:"
+          ls -la examples/factory_demo
+          echo "Listing image folder:"
+          ls -la examples/factory_demo/image || echo "IMAGE FOLDER MISSING"
+
+      # ------------------------------------------------------------
+      # 3️⃣ Build using official ESP-IDF action
+      # ------------------------------------------------------------
       - name: Build factory_demo
         uses: espressif/esp-idf-ci-action@v1
         with:
@@ -22,19 +39,27 @@ jobs:
           target: esp32s3
           path: examples/factory_demo
           command: |
-            rm -f sdkconfig sdkconfig.defaults
+            # Keep original config (DO NOT delete sdkconfig)
             cp sdkconfig.ci.box sdkconfig.defaults
+
+            # Only append necessary board settings
             echo "CONFIG_ESP_BOX_BOARD_S3_BOX_3=y" >> sdkconfig.defaults
             echo "CONFIG_BSP_TOUCH_ENABLED=y" >> sdkconfig.defaults
 
+            # Set target and build
             idf.py set-target esp32s3
             idf.py build
 
-      - name: Upload Firmware
+      # ------------------------------------------------------------
+      # 4️⃣ Upload firmware artifacts
+      # ------------------------------------------------------------
+      - name: Upload Firmware Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: esp-box-s3-build
+          name: esp-box-s3-box-3-firmware
           path: |
-            examples/factory_demo/build/*.bin
-            examples/factory_demo/build/bootloader/*.bin
-            examples/factory_demo/build/partition_table/*.bin
+            examples/factory_demo/build/bootloader/bootloader.bin
+            examples/factory_demo/build/partition_table/partition-table.bin
+            examples/factory_demo/build/ota_data_initial.bin
+            examples/factory_demo/build/factory_demo.bin
+            examples/factory_demo/build/storage.bin
