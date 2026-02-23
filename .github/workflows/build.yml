@@ -1,8 +1,5 @@
-name: Build ESP-BOX S3-BOX-3 (Stable)
-
-on:
-  push:
-  workflow_dispatch:
+name: Build ESP-BOX S3-BOX-3 + Home Assistant
+on: [push, workflow_dispatch]
 
 jobs:
   build:
@@ -10,56 +7,80 @@ jobs:
 
     steps:
       # ------------------------------------------------------------
-      # 1️⃣ Checkout official esp-box repo (FULL clone)
+      # 1. Checkout ESP-BOX repository with submodules
       # ------------------------------------------------------------
-      - name: Checkout esp-box
+      - name: Checkout esp-box repository
         uses: actions/checkout@v4
         with:
-          repository: espressif/esp-box
+          repository: 'espressif/esp-box'
           submodules: recursive
           fetch-depth: 0
 
       # ------------------------------------------------------------
-      # 2️⃣ Verify SPIFFS image folder exists
+      # 2. Build firmware with ESP-IDF CI Action
       # ------------------------------------------------------------
-      - name: Debug factory_demo structure
-        run: |
-          echo "Listing factory_demo:"
-          ls -la examples/factory_demo
-          echo "Listing image folder:"
-          ls -la examples/factory_demo/image || echo "IMAGE FOLDER MISSING"
-
-      # ------------------------------------------------------------
-      # 3️⃣ Build using official ESP-IDF action
-      # ------------------------------------------------------------
-      - name: Build factory_demo
+      - name: Build and Generate Binaries
         uses: espressif/esp-idf-ci-action@v1
         with:
           esp_idf_version: v5.3
           target: esp32s3
-          path: examples/factory_demo
+          path: 'examples/factory_demo'
           command: |
+            set -e
+
+            # --------------------------------------------------
+            # Copy CI sdkconfig and force S3-BOX-3 board
+            # --------------------------------------------------
             cp sdkconfig.ci.box sdkconfig.defaults
-      
-            # Force correct board
             echo "CONFIG_ESP_BOX_BOARD_S3_BOX_3=y" >> sdkconfig.defaults
-      
-            # FORCE 16MB flash (CRITICAL FIX)
+            echo "CONFIG_ESPTOOLPY_FLASHMODE_DIO=y" >> sdkconfig.defaults
+            echo "CONFIG_ESPTOOLPY_FLASHMODE_OPI=n" >> sdkconfig.defaults
+
+            # --------------------------------------------------
+            # Force 16MB flash (critical for SPIFFS storage partition)
+            # --------------------------------------------------
             echo "CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y" >> sdkconfig.defaults
-      
+
+            # --------------------------------------------------
+            # Clean old build artifacts & set target
+            # --------------------------------------------------
+            idf.py fullclean
             idf.py set-target esp32s3
+
+            # --------------------------------------------------
+            # Ensure SPIFFS folder exists and copy UI assets
+            # --------------------------------------------------
+            mkdir -p ./spiffs_image
+            cp -r ./image/* ./spiffs_image/ || echo "Warning: no UI images found"
+
+            # --------------------------------------------------
+            # Build firmware
+            # --------------------------------------------------
             idf.py build
 
+            # --------------------------------------------------
+            # Generate SPIFFS binary (UI graphics)
+            # --------------------------------------------------
+            python /opt/esp/idf/components/spiffs/spiffsgen.py 0x28a000 ./spiffs_image build/storage.bin
+
+            # --------------------------------------------------
+            # Generate Voice AI model
+            # --------------------------------------------------
+            SR_PATH=$(find ../../ -name movemodel.py | head -n 1)
+            python "$SR_PATH" -d1 sdkconfig -d2 "$(dirname "$SR_PATH")" -d3 build
+            cp build/srmodels/srmodels.bin build/model.bin || echo "Model not built"
+
       # ------------------------------------------------------------
-      # 4️⃣ Upload firmware artifacts
+      # 3. Upload binaries (ready for ESP Web Flasher or OTA)
       # ------------------------------------------------------------
-      - name: Upload Firmware Artifacts
+      - name: Upload Firmware Bundle
         uses: actions/upload-artifact@v4
         with:
-          name: esp-box-s3-box-3-firmware
+          name: esp-box-s3-box-3-bundle
           path: |
             examples/factory_demo/build/bootloader/bootloader.bin
             examples/factory_demo/build/partition_table/partition-table.bin
             examples/factory_demo/build/ota_data_initial.bin
             examples/factory_demo/build/factory_demo.bin
             examples/factory_demo/build/storage.bin
+            examples/factory_demo/build/model.bin
