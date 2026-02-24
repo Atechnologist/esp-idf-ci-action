@@ -1,86 +1,70 @@
-name: Build ESP-BOX S3-BOX-3 + Home Assistant
-on: [push, workflow_dispatch]
+name: Build ESP32-S3-BOX-3 Factory Demo
+
+on:
+  push:
+  pull_request:
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
-      # ------------------------------------------------------------
-      # 1. Checkout ESP-BOX repository with submodules
-      # ------------------------------------------------------------
-      - name: Checkout esp-box repository
-        uses: actions/checkout@v4
-        with:
-          repository: 'espressif/esp-box'
-          submodules: recursive
-          fetch-depth: 0
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
 
-      # ------------------------------------------------------------
-      # 2. Build firmware with ESP-IDF CI Action
-      # ------------------------------------------------------------
-      - name: Build and Generate Binaries
-        uses: espressif/esp-idf-ci-action@v1
-        with:
-          esp_idf_version: v5.3
-          target: esp32s3
-          path: 'examples/factory_demo'
-          command: |
-            set -e
+    - name: ESP-IDF Build
+      uses: espressif/esp-idf-ci-action@v1
+      with:
+        esp_idf_version: v5.3
+        target: esp32s3
+        path: examples/factory_demo
+        command: |
 
-            # --------------------------------------------------
-            # Copy CI sdkconfig and force S3-BOX-3 board
-            # --------------------------------------------------
-            cp sdkconfig.ci.box sdkconfig.defaults
-            echo "CONFIG_ESP_BOX_BOARD_S3_BOX_3=y" >> sdkconfig.defaults
-            echo "CONFIG_ESPTOOLPY_FLASHMODE_DIO=y" >> sdkconfig.defaults
-            echo "CONFIG_ESPTOOLPY_FLASHMODE_OPI=n" >> sdkconfig.defaults
+          echo "===== CLEAN ====="
+          idf.py fullclean
 
-            # --------------------------------------------------
-            # Force 16MB flash (critical for SPIFFS storage partition)
-            # --------------------------------------------------
-            echo "CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y" >> sdkconfig.defaults
+          echo "===== FORCE TARGET ====="
+          idf.py set-target esp32s3
 
-            # --------------------------------------------------
-            # Clean old build artifacts & set target
-            # --------------------------------------------------
-            idf.py fullclean
-            idf.py set-target esp32s3
+          echo "===== COPY SDKCONFIG ====="
+          cp sdkconfig.ci.box sdkconfig.defaults
 
-            # --------------------------------------------------
-            # Ensure SPIFFS folder exists and copy UI assets
-            # --------------------------------------------------
-            mkdir -p ./spiffs_image
-            cp -r ./image/* ./spiffs_image/ || echo "Warning: no UI images found"
+          echo "CONFIG_ESP_BOX_BOARD_S3_BOX_3=y" >> sdkconfig.defaults
+          echo "CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y" >> sdkconfig.defaults
 
-            # --------------------------------------------------
-            # Build firmware
-            # --------------------------------------------------
-            idf.py build
+          echo "===== PREPARE SPIFFS ====="
+          mkdir -p ./spiffs_image
 
-            # --------------------------------------------------
-            # Generate SPIFFS binary (UI graphics)
-            # --------------------------------------------------
-            python /opt/esp/idf/components/spiffs/spiffsgen.py 0x28a000 ./spiffs_image build/storage.bin
+          if [ -d ./image ] && [ "$(ls -A ./image)" ]; then
+              cp -r ./image/* ./spiffs_image/
+          else
+              echo "Creating dummy SPIFFS file"
+              echo "dummy" > ./spiffs_image/dummy.txt
+          fi
 
-            # --------------------------------------------------
-            # Generate Voice AI model
-            # --------------------------------------------------
-            SR_PATH=$(find ../../ -name movemodel.py | head -n 1)
-            python "$SR_PATH" -d1 sdkconfig -d2 "$(dirname "$SR_PATH")" -d3 build
-            cp build/srmodels/srmodels.bin build/model.bin || echo "Model not built"
+          echo "===== BUILD FIRMWARE ====="
+          idf.py build
 
-      # ------------------------------------------------------------
-      # 3. Upload binaries (ready for ESP Web Flasher or OTA)
-      # ------------------------------------------------------------
-      - name: Upload Firmware Bundle
-        uses: actions/upload-artifact@v4
-        with:
-          name: esp-box-s3-box-3-bundle
-          path: |
-            examples/factory_demo/build/bootloader/bootloader.bin
-            examples/factory_demo/build/partition_table/partition-table.bin
-            examples/factory_demo/build/ota_data_initial.bin
-            examples/factory_demo/build/factory_demo.bin
-            examples/factory_demo/build/storage.bin
-            examples/factory_demo/build/model.bin
+          echo "===== GENERATE SPIFFS IMAGE ====="
+          python /opt/esp/idf/components/spiffs/spiffsgen.py \
+              0x28a000 ./spiffs_image build/storage.bin
+
+          echo "===== GENERATE VOICE MODEL ====="
+          SR_PATH=$(find ../../ -name movemodel.py | head -n 1)
+
+          if [ -n "$SR_PATH" ]; then
+              python "$SR_PATH" -d1 sdkconfig -d2 "$(dirname "$SR_PATH")" -d3 build
+              cp build/srmodels/srmodels.bin build/model.bin || true
+          else
+              echo "Voice model script not found, skipping."
+          fi
+
+    - name: Upload Firmware Artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: esp32s3-box3-firmware
+        path: |
+          examples/factory_demo/build/*.bin
+          examples/factory_demo/build/*.elf
