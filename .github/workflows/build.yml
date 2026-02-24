@@ -1,47 +1,70 @@
-name: Build ESP32-S3-BOX-3
+name: Build ESP-BOX Original 2026 with HA addon
 
-on:
-  push:
-  workflow_dispatch:
+on: [push, workflow_dispatch]
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout esp-box
+      # 1. Checkout the esp-box repository
+      - name: Checkout esp-box repository
         uses: actions/checkout@v4
         with:
-          repository: espressif/esp-box
-          submodules: recursive
+          repository: 'espressif/esp-box'
+          submodules: 'recursive'
 
-      - name: Build + Auto Merge
+      # 2. Build and Generate Binaries
+      - name: Build and Generate Binaries
         uses: espressif/esp-idf-ci-action@v1
         with:
           esp_idf_version: v5.3
           target: esp32s3
-          path: examples/factory_demo
+          path: 'examples/factory_demo'
           command: |
-
-            set -e
-
-            idf.py fullclean
-            idf.py set-target esp32s3
-
+            # --- 1. Prepare sdkconfig ---
+            rm -f sdkconfig sdkconfig.defaults
             cp sdkconfig.ci.box sdkconfig.defaults
-            echo "CONFIG_ESP_BOX_BOARD_S3_BOX_3=y" >> sdkconfig.defaults
-            echo "CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y" >> sdkconfig.defaults
+            echo "CONFIG_ESP_BOX_BOARD_S3_BOX=y" >> sdkconfig.defaults
+            echo "CONFIG_ESP_BOX_BOARD_S3_BOX_3=n" >> sdkconfig.defaults
+            echo "CONFIG_ESPTOOLPY_FLASHMODE_DIO=y" >> sdkconfig.defaults
+            echo "CONFIG_ESPTOOLPY_FLASHMODE_OPI=n" >> sdkconfig.defaults
 
+            # --- 2. Build Project ---
+            idf.py set-target esp32s3
             idf.py build
 
-            echo "===== AUTO MERGE USING IDF ====="
-            idf.py merge-bin -o build/firmware_merged.bin
+            # --- 3. Prepare SPIFFS storage ---
+            mkdir -p ./spiffs_image
+            cp -r ./image/* ./spiffs_image/ || echo "No UI images, skipping"
 
-            echo "===== VERIFY MERGED FILE ====="
-            ls -lah build/firmware_merged.bin
+            mkdir -p build
+            python /opt/esp/idf/components/spiffs/spiffsgen.py 0x28a000 ./spiffs_image build/storage.bin --page-size=256 --obj-name-len=32 --meta-len=4 --use-magic --use-magic-len
 
-      - name: Upload merged firmware
+            # --- 4. Generate Voice Model ---
+            SR_PATH=$(find ../../ -name "movemodel.py" | head -n 1)
+            python "$SR_PATH" -d1 sdkconfig -d2 "$(dirname "$SR_PATH")" -d3 build || echo "Voice model generation failed"
+            cp build/srmodels/srmodels.bin build/ || echo "Model file missing, skipping"
+
+            # --- 5. Debug: check all files exist ---
+            echo "=== DEBUG FILES BEFORE MERGE ==="
+            ls -lah build/
+
+            # --- 6. Merge all binaries into one firmware image ---
+            esptool --chip esp32s3 merge_bin -o build/firmware_merged.bin -f raw \
+              0x0 build/bootloader/bootloader.bin \
+              0x20000 build/factory_demo.bin \
+              0x8000 build/partition_table/partition-table.bin \
+              0x16000 build/ota_data_initial.bin \
+              0x6c4000 build/srmodels.bin \
+              0x43a000 build/storage.bin
+
+      # 3. Upload Binaries
+      - name: Upload Binaries
         uses: actions/upload-artifact@v4
         with:
-          name: esp32s3-box3-merged
-          path: examples/factory_demo/build/firmware_merged.bin
+          name: esp-box-v1-complete-bundle
+          path: |
+            examples/factory_demo/build/firmware_merged.bin
+            examples/factory_demo/build/storage.bin
+            examples/factory_demo/build/srmodels.bin
