@@ -33,7 +33,7 @@ jobs:
 
             idf.py build
 
-            idf.py merge-bin -o build/firmware_merged.bin
+            idf.py merge-bin -o firmware_merged.bin
 
       - name: Upload merged firmware
         uses: actions/upload-artifact@v4
