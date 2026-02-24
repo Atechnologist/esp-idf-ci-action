@@ -1,4 +1,4 @@
-name: Build ESP32-S3-BOX-3 (Merged Firmware)
+name: Build ESP32-S3-BOX-3
 
 on:
   push:
@@ -9,20 +9,13 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # ------------------------------------------------------------
-      # 1️⃣ Checkout official ESP-BOX repository
-      # ------------------------------------------------------------
       - name: Checkout esp-box
         uses: actions/checkout@v4
         with:
           repository: espressif/esp-box
           submodules: recursive
-          fetch-depth: 0
 
-      # ------------------------------------------------------------
-      # 2️⃣ Build + Merge inside ESP-IDF container
-      # ------------------------------------------------------------
-      - name: Build and Merge Firmware
+      - name: Build + Auto Merge
         uses: espressif/esp-idf-ci-action@v1
         with:
           esp_idf_version: v5.3
@@ -32,46 +25,21 @@ jobs:
 
             set -e
 
-            echo "===== CLEAN ====="
             idf.py fullclean
-
-            echo "===== SET TARGET ====="
             idf.py set-target esp32s3
 
-            echo "===== CONFIGURE BOARD ====="
             cp sdkconfig.ci.box sdkconfig.defaults
             echo "CONFIG_ESP_BOX_BOARD_S3_BOX_3=y" >> sdkconfig.defaults
             echo "CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y" >> sdkconfig.defaults
 
-            echo "===== PREPARE SAFE SPIFFS ====="
-            mkdir -p ./spiffs_image
-            echo "dummy" > ./spiffs_image/dummy.txt
-
-            echo "===== BUILD ====="
             idf.py build
 
-            echo "===== VERIFY FILES ====="
-            ls -la build
-            ls -la build/bootloader
-            ls -la build/partition_table
+            echo "===== AUTO MERGE USING IDF ====="
+            idf.py merge-bin -o build/firmware_merged.bin
 
-            echo "===== MERGE BINARIES ====="
+            echo "===== VERIFY MERGED FILE ====="
+            ls -lah build/firmware_merged.bin
 
-            esptool.py --chip esp32s3 merge_bin \
-              -o build/firmware_merged.bin \
-              --flash_mode dio \
-              --flash_size 16MB \
-              0x0 build/bootloader/bootloader.bin \
-              0x8000 build/partition_table/partition-table.bin \
-              0xe000 build/ota_data_initial.bin \
-              0x10000 build/factory_demo.bin
-
-            echo "===== MERGED FILE CREATED ====="
-            ls -la build/firmware_merged.bin
-
-      # ------------------------------------------------------------
-      # 3️⃣ Upload merged firmware from workspace
-      # ------------------------------------------------------------
       - name: Upload merged firmware
         uses: actions/upload-artifact@v4
         with:
