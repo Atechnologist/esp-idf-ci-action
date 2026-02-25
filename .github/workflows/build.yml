@@ -14,32 +14,21 @@ jobs:
           repository: espressif/esp-box
           ref: master
 
-      - name: Setup ESP-IDF
+      - name: Build firmware
         uses: espressif/esp-idf-ci-action@v1
         with:
           esp_idf_version: release-v5.1
+          target: esp32s3
+          path: examples/factory_demo
+          command: |
+            idf.py fullclean
+            rm -f sdkconfig
+            cp sdkconfig.ci.box sdkconfig
+            idf.py build
 
-      - name: Build factory_demo for ORIGINAL ESP32-S3-BOX
+      - name: Merge firmware
         run: |
           cd examples/factory_demo
-
-          # Clean everything
-          idf.py fullclean
-          rm -f sdkconfig
-
-          # Set correct chip
-          idf.py set-target esp32s3
-
-          # FORCE original ESP32-S3-BOX config
-          cp sdkconfig.ci.box sdkconfig
-
-          # Build
-          idf.py build
-
-      - name: Merge firmware into single bin
-        run: |
-          cd examples/factory_demo
-
           esptool.py --chip esp32s3 merge_bin -o firmware_merged.bin \
             --flash_mode dio \
             --flash_size 16MB \
