@@ -1,7 +1,6 @@
-name: Build ESP32-S3-BOX
+name: Build ESP32-S3-BOX Firmware
 
 on:
-  push:
   workflow_dispatch:
 
 jobs:
@@ -9,36 +8,50 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout esp-box repository
+      - name: Checkout esp-box repo
         uses: actions/checkout@v4
         with:
           repository: espressif/esp-box
-          submodules: recursive
+          ref: master
 
-      - name: Build and Merge Firmware
+      - name: Setup ESP-IDF
         uses: espressif/esp-idf-ci-action@v1
         with:
-          esp_idf_version: v5.3
-          target: esp32s3
-          path: examples/factory_demo
-          command: |
-            set -e
+          esp_idf_version: release-v5.1
 
-            idf.py fullclean
-            rm -f sdkconfig
-            
-            idf.py set-target esp32s3
-            
-            cp sdkconfig.ci.box sdkconfig.defaults
-            
-            echo "CONFIG_ESP_BOX_BOARD_S3_BOX=y" >> sdkconfig.defaults
-            echo "CONFIG_ESP_BOX_BOARD_S3_BOX_3=n" >> sdkconfig.defaults
-            echo "CONFIG_ESPTOOLPY_FLASHMODE_DIO=y" >> sdkconfig.defaults
-            echo "CONFIG_ESPTOOLPY_FLASHMODE_OPI=n" >> sdkconfig.defaults
+      - name: Build factory_demo for ORIGINAL ESP32-S3-BOX
+        run: |
+          cd examples/factory_demo
 
-            idf.py build
+          # Clean everything
+          idf.py fullclean
+          rm -f sdkconfig
 
-            idf.py merge-bin -o firmware_merged.bin
+          # Set correct chip
+          idf.py set-target esp32s3
+
+          # FORCE original ESP32-S3-BOX config
+          cp sdkconfig.ci.box sdkconfig
+
+          # Build
+          idf.py build
+
+      - name: Merge firmware into single bin
+        run: |
+          cd examples/factory_demo
+
+          esptool.py --chip esp32s3 merge_bin -o firmware_merged.bin \
+            --flash_mode dio \
+            --flash_size 16MB \
+            0x0 build/bootloader/bootloader.bin \
+            0x8000 build/partition_table/partition-table.bin \
+            0x10000 build/factory_demo.bin
+
+      - name: Upload merged firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: firmware
+          path: examples/factory_demo/firmware_merged.bin
 
       - name: Upload merged firmware
         uses: actions/upload-artifact@v4
