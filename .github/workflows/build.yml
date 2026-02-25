@@ -52,9 +52,3 @@ jobs:
         with:
           name: firmware
           path: examples/factory_demo/firmware_merged.bin
-
-      - name: Upload merged firmware
-        uses: actions/upload-artifact@v4
-        with:
-          name: esp32s3-box-merged
-          path: examples/factory_demo/build/firmware_merged.bin
