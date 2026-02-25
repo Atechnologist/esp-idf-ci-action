@@ -26,12 +26,15 @@ jobs:
 
             idf.py fullclean
             rm -f sdkconfig
+            
             idf.py set-target esp32s3
-
+            
             cp sdkconfig.ci.box sdkconfig.defaults
-            echo "CONFIG_ESP_BOX_BOARD_S3_BOX=n" >> sdkconfig.defaults
-            echo "CONFIG_ESP_BOX_BOARD_S3_BOX_3=y" >> sdkconfig.defaults
+            
+            echo "CONFIG_ESP_BOX_BOARD_S3_BOX=y" >> sdkconfig.defaults
+            echo "CONFIG_ESP_BOX_BOARD_S3_BOX_3=n" >> sdkconfig.defaults
             echo "CONFIG_ESPTOOLPY_FLASHMODE_DIO=y" >> sdkconfig.defaults
+            echo "CONFIG_ESPTOOLPY_FLASHMODE_OPI=n" >> sdkconfig.defaults
 
             idf.py build
 
